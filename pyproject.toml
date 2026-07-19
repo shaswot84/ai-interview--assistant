@@ -1,7 +1,7 @@
 [project]
 name = "ai-interview-assistant"
 version = "0.1.0"
-description = "Add your description here"
+description = "Personalised mock interview app powered by an OpenAI-compatible LLM"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
@@ -12,4 +12,9 @@ dependencies = [
     "pytest>=8.0.0",
     "python-dotenv>=1.0.0",
     "weasyprint>=61.0",
+]
+
+[tool.pytest.ini_options]
+markers = [
+    "slow: marks tests as slow (performance benchmarks, skipped by default)",
 ]

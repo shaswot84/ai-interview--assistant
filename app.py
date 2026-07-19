@@ -7,7 +7,7 @@ from llm_client import evaluate_answer, generate_questions, synthesize_scorecard
 from schemas import InterviewState, Seniority, SessionState, UserProfile
 from scoring import get_letter_grade, prepare_radar_chart_data, render_radar_chart
 from session_state import transition
-from timer import get_timer_limit
+from timer import get_timer_limit, is_timed_out
 
 ONBOARDING_FIELDS = ["role", "seniority", "industry", "interview_type"]
 ONBOARDING_PROMPTS = [
@@ -75,6 +75,29 @@ async def on_export_md(action: cl.Action):
     with open(path, "w") as f:
         f.write(md)
     await cl.File(path, name="interview_transcript.md", display="inline").send()
+
+
+@cl.action_callback("retry_evaluation")
+async def on_retry_evaluation(action: cl.Action):
+    state = _get_state()
+    q = state.questions[state.current_question_index]
+    answer = state.transcript.get(q.id, "")
+    msg = cl.Message(content="Re-evaluating your answer...")
+    await msg.send()
+    try:
+        eval_ = evaluate_answer(q, answer, state.profile)
+        state.evaluations[q.id] = eval_
+    except Exception:
+        from schemas import Evaluation
+        eval_ = Evaluation(
+            clarity=5, completeness=5, relevance=5, grammar=5, impact=5,
+            grammar_correction="", simplified_version="",
+            actionable_feedback="Evaluation unavailable due to an error.",
+        )
+        state.evaluations[q.id] = eval_
+    state = transition(state, "evaluation_done")
+    _set_state(state)
+    await _show_feedback(state)
 
 
 @cl.action_callback("restart")
@@ -167,11 +190,17 @@ async def _handle_answer(state: SessionState, answer: str):
     q = state.questions[state.current_question_index]
     state.transcript[q.id] = answer
 
+    if is_timed_out(state):
+        await cl.Message(
+            content="⏰ **Timer has expired.** Your answer was logged but skipped for evaluation."
+        ).send()
+
     state = transition(state, "submit_answer")
     _set_state(state)
 
     msg = cl.Message(content="Evaluating your answer...")
     await msg.send()
+    eval_failed = False
     try:
         eval_ = evaluate_answer(q, answer, state.profile)
         state.evaluations[q.id] = eval_
@@ -183,9 +212,15 @@ async def _handle_answer(state: SessionState, answer: str):
             actionable_feedback="Evaluation unavailable due to an error.",
         )
         state.evaluations[q.id] = eval_
+        eval_failed = True
 
     state = transition(state, "evaluation_done")
     _set_state(state)
+    if eval_failed:
+        await cl.Message(
+            content="Evaluation encountered an error. You can try again below.",
+            actions=[cl.Action(name="retry_evaluation", value="retry", label="Retry Evaluation")],
+        ).send()
     await _show_feedback(state)
 
 

@@ -1,7 +1,8 @@
 from unittest.mock import MagicMock, patch
 
+import httpx
 import pytest
-from openai import APIError
+from openai import APIError, RateLimitError
 
 from llm_client import (
     _EvaluationResponse,
@@ -14,6 +15,7 @@ from llm_client import (
 )
 from schemas import (
     Evaluation,
+    InterviewState,
     LetterGrade,
     Question,
     QuestionCategory,
@@ -122,6 +124,22 @@ class TestRetryExhaustion:
                 max_retries=2,
             )
 
+    @patch("llm_client.get_openai_client")
+    def test_rate_limit_error_retries_then_raises(self, mock_get_client):
+        mock_client = MagicMock()
+        mock_response = MagicMock(spec=httpx.Response, status_code=429, headers={})
+        mock_client.chat.completions.create.side_effect = RateLimitError(
+            message="Rate limited", response=mock_response, body=None,
+        )
+        mock_get_client.return_value = mock_client
+
+        with pytest.raises(RuntimeError, match="LLM call failed after 2 retries"):
+            _call_with_retry(
+                messages=[{"role": "user", "content": "hi"}],
+                response_model=QuestionsResponse,
+                max_retries=2,
+            )
+
     @patch("llm_client._call_with_retry")
     @patch("llm_client.fallback_questions")
     def test_question_gen_falls_back_on_llm_failure(self, mock_fallback, mock_call):
@@ -143,6 +161,13 @@ class TestAllSkipped:
         state = SessionState()
         with pytest.raises(ValueError, match="Cannot synthesize scorecard without a profile"):
             synthesize_scorecard(state)
+
+    def test_session_state_isolation(self):
+        s1 = SessionState(current_state=InterviewState.IDLE, profile=A_PROFILE)
+        s2 = SessionState()
+        assert s1 is not s2
+        assert s1.profile is not None
+        assert s2.profile is None
 
 
 class TestFallback:
