@@ -1,0 +1,167 @@
+from unittest.mock import MagicMock, patch
+
+import pytest
+
+from llm_client import (
+    _EvaluationResponse,
+    _ScorecardResponse,
+    QuestionsResponse,
+    _call_with_retry,
+    evaluate_answer,
+    generate_questions,
+    synthesize_scorecard,
+)
+from schemas import (
+    Evaluation,
+    Question,
+    QuestionCategory,
+    Scorecard,
+    Seniority,
+    SessionState,
+    UserProfile,
+)
+
+
+def _mock_chat_completion(content: str):
+    mock_message = MagicMock()
+    mock_message.content = content
+    mock_choice = MagicMock()
+    mock_choice.message = mock_message
+    mock_response = MagicMock()
+    mock_response.choices = [mock_choice]
+    return mock_response
+
+
+A_PROFILE = UserProfile(
+    role="Backend Engineer",
+    seniority=Seniority.MID,
+    industry="FinTech",
+    interview_type="technical",
+)
+
+A_QUESTION = Question(
+    id="q1",
+    text="What is a RESTful API?",
+    category=QuestionCategory.TECHNICAL,
+)
+
+VALID_QUESTIONS_JSON = """{
+  "questions": [
+    {"id": "q1", "text": "What is REST?", "category": "technical"},
+    {"id": "q2", "text": "Explain ACID.", "category": "technical"},
+    {"id": "q3", "text": "What is Docker?", "category": "technical"},
+    {"id": "q4", "text": "Tell me about a conflict.", "category": "behavioural"},
+    {"id": "q5", "text": "How do you prioritise?", "category": "behavioural"}
+  ]
+}"""
+
+VALID_EVALUATION_JSON = """{
+  "clarity": 8,
+  "completeness": 7,
+  "relevance": 9,
+  "grammar": 6,
+  "impact": 8,
+  "grammar_correction": "Fixed grammar.",
+  "simplified_version": "Simpler version.",
+  "actionable_feedback": "Be more specific."
+}"""
+
+VALID_SCORECARD_JSON = """{
+  "strengths": ["Good communication"],
+  "improvements": ["Be more concise"],
+  "model_answer": "A comprehensive answer...",
+  "overall_assessment": "Solid performance.",
+  "grade": "B"
+}"""
+
+
+class TestCallWithRetry:
+    @patch("llm_client.get_openai_client")
+    def test_returns_parsed_model(self, mock_get_client):
+        mock_client = MagicMock()
+        mock_client.chat.completions.create.return_value = _mock_chat_completion(
+            VALID_QUESTIONS_JSON
+        )
+        mock_get_client.return_value = mock_client
+
+        result = _call_with_retry(
+            messages=[{"role": "user", "content": "hello"}],
+            response_model=QuestionsResponse,
+        )
+        assert isinstance(result, QuestionsResponse)
+        assert len(result.questions) == 5
+
+    @patch("llm_client.get_openai_client")
+    def test_raises_after_max_retries(self, mock_get_client):
+        mock_client = MagicMock()
+        mock_client.chat.completions.create.side_effect = ValueError("API error")
+        mock_get_client.return_value = mock_client
+
+        with pytest.raises(RuntimeError, match="LLM call failed after 2 retries"):
+            _call_with_retry(
+                messages=[{"role": "user", "content": "hello"}],
+                response_model=QuestionsResponse,
+                max_retries=2,
+            )
+
+
+class TestGenerateQuestions:
+    @patch("llm_client._call_with_retry")
+    def test_returns_questions_from_llm(self, mock_call):
+        expected = [
+            Question(id="q1", text="What is REST?", category=QuestionCategory.TECHNICAL),
+        ]
+        mock_call.return_value = QuestionsResponse(questions=expected)
+        result = generate_questions(A_PROFILE)
+        assert result == expected
+
+    @patch("llm_client._call_with_retry")
+    @patch("llm_client.fallback_questions")
+    def test_falls_back_on_llm_failure(self, mock_fallback, mock_call):
+        mock_call.side_effect = RuntimeError("API down")
+        fallback_qs = [
+            Question(id="f1", text="Fallback?", category=QuestionCategory.TECHNICAL),
+        ]
+        mock_fallback.return_value = fallback_qs
+        result = generate_questions(A_PROFILE)
+        assert result == fallback_qs
+        mock_fallback.assert_called_once_with(A_PROFILE, needed=5)
+
+
+class TestEvaluateAnswer:
+    @patch("llm_client._call_with_retry")
+    def test_returns_evaluation(self, mock_call):
+        mock_call.return_value = _EvaluationResponse(
+            clarity=8,
+            completeness=7,
+            relevance=9,
+            grammar=6,
+            impact=8,
+            grammar_correction="Fixed.",
+            simplified_version="Simple.",
+            actionable_feedback="More detail.",
+        )
+        result = evaluate_answer(A_QUESTION, "My answer", A_PROFILE)
+        assert isinstance(result, Evaluation)
+        assert result.clarity == 8
+
+
+class TestSynthesizeScorecard:
+    @patch("llm_client._call_with_retry")
+    def test_returns_scorecard(self, mock_call):
+        mock_call.return_value = _ScorecardResponse(
+            strengths=["Good"],
+            improvements=["Needs work"],
+            model_answer="Ideal answer",
+            overall_assessment="Decent",
+            grade="B",
+        )
+        state = SessionState(profile=A_PROFILE)
+        result = synthesize_scorecard(state)
+        assert isinstance(result, Scorecard)
+        assert result.grade.value == "B"
+
+    def test_raises_without_profile(self):
+        state = SessionState()
+        with pytest.raises(ValueError, match="Cannot synthesize scorecard without a profile"):
+            synthesize_scorecard(state)
