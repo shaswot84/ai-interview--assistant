@@ -7,7 +7,7 @@ from llm_client import evaluate_answer, generate_questions, synthesize_scorecard
 from schemas import InterviewState, Seniority, SessionState, UserProfile
 from scoring import get_letter_grade, prepare_radar_chart_data, render_radar_chart
 from session_state import transition
-from timer import is_timed_out, get_timer_limit
+from timer import get_timer_limit
 
 ONBOARDING_FIELDS = ["role", "seniority", "industry", "interview_type"]
 ONBOARDING_PROMPTS = [
@@ -167,10 +167,7 @@ async def _handle_answer(state: SessionState, answer: str):
     q = state.questions[state.current_question_index]
     state.transcript[q.id] = answer
 
-    if is_timed_out(state):
-        state = transition(state, "submit_answer")
-    else:
-        state = transition(state, "submit_answer")
+    state = transition(state, "submit_answer")
     _set_state(state)
 
     msg = cl.Message(content="Evaluating your answer...")
@@ -327,6 +324,10 @@ async def on_message(message: cl.Message):
 
     elif state.current_state == InterviewState.ONBOARDING:
         idx = cl.user_session.get("onboarding_idx", 0)
+        if not text:
+            await cl.Message(content="Please enter a value.").send()
+            await _ask_next_field()
+            return
         data = cl.user_session.get("profile_data", {})
         field = ONBOARDING_FIELDS[idx - 1]
         data[field] = text

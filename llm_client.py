@@ -109,11 +109,11 @@ def evaluate_answer(
     ]
     result = _call_with_retry(messages, _EvaluationResponse)
     return Evaluation(
-        clarity=result.clarity,
-        completeness=result.completeness,
-        relevance=result.relevance,
-        grammar=result.grammar,
-        impact=result.impact,
+        clarity=max(1, min(10, result.clarity)),
+        completeness=max(1, min(10, result.completeness)),
+        relevance=max(1, min(10, result.relevance)),
+        grammar=max(1, min(10, result.grammar)),
+        impact=max(1, min(10, result.impact)),
         grammar_correction=result.grammar_correction,
         simplified_version=result.simplified_version,
         actionable_feedback=result.actionable_feedback,
