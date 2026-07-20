@@ -1,5 +1,7 @@
 import re
 
+import plotly.io as pio
+
 from schemas import SessionState
 
 
@@ -82,11 +84,24 @@ def generate_markdown_transcript(state: SessionState) -> str:
     return "\n".join(lines)
 
 
+def _radar_chart_html(state: SessionState) -> str:
+    if not state.evaluations:
+        return ""
+    from scoring import prepare_radar_chart_data, render_radar_chart
+    import base64, io
+    data = prepare_radar_chart_data(state.evaluations)
+    fig = render_radar_chart(data)
+    img_bytes = pio.to_image(fig, format="png", width=600, height=400, scale=2)
+    b64 = base64.b64encode(img_bytes).decode()
+    return f'<div style="text-align:center;margin:2em 0;"><img src="data:image/png;base64,{b64}" alt="Radar Chart" style="max-width:100%;height:auto;"></div>'
+
+
 def generate_pdf(state: SessionState, path: str) -> str:
     from weasyprint import HTML
 
     md = generate_markdown_transcript(state)
     body = _md_to_html(md)
-    html = _html_document(body)
+    radar = _radar_chart_html(state)
+    html = _html_document(body + radar)
     HTML(string=html).write_pdf(path)
     return path
