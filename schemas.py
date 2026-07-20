@@ -1,3 +1,5 @@
+"""Pydantic v2 schemas — all data models used throughout the application."""
+
 from __future__ import annotations
 
 from datetime import datetime
@@ -8,6 +10,7 @@ from pydantic import BaseModel, Field
 
 
 class Seniority(str, Enum):
+    """Experience level of the candidate."""
     JUNIOR = "Junior"
     MID = "Mid"
     SENIOR = "Senior"
@@ -15,11 +18,13 @@ class Seniority(str, Enum):
 
 
 class QuestionCategory(str, Enum):
+    """Type of interview question."""
     TECHNICAL = "technical"
     BEHAVIOURAL = "behavioural"
 
 
 class InterviewState(str, Enum):
+    """All possible states in the interview state machine."""
     IDLE = "IDLE"
     ONBOARDING = "ONBOARDING"
     GENERATING = "GENERATING"
@@ -31,6 +36,7 @@ class InterviewState(str, Enum):
 
 
 class LetterGrade(str, Enum):
+    """Final grade letters."""
     A = "A"
     B = "B"
     C = "C"
@@ -39,6 +45,7 @@ class LetterGrade(str, Enum):
 
 
 class UserProfile(BaseModel):
+    """Candidate profile assembled during onboarding."""
     role: str = Field(..., min_length=3)
     seniority: Seniority
     industry: str
@@ -46,12 +53,14 @@ class UserProfile(BaseModel):
 
 
 class Question(BaseModel):
+    """An interview question with an identifier and category."""
     id: str
     text: str
     category: QuestionCategory
 
 
 class Evaluation(BaseModel):
+    """Scores for a single answer across five dimensions."""
     clarity: int = Field(..., ge=1, le=10)
     completeness: int = Field(..., ge=1, le=10)
     relevance: int = Field(..., ge=1, le=10)
@@ -63,6 +72,7 @@ class Evaluation(BaseModel):
 
 
 class Scorecard(BaseModel):
+    """Final interview scorecard with strengths, improvements, and grade."""
     strengths: list[str]
     improvements: list[str]
     model_answer: str
@@ -71,6 +81,7 @@ class Scorecard(BaseModel):
 
 
 class SessionState(BaseModel):
+    """Complete session state — profile, questions, answers, evaluations, and machine state."""
     current_state: InterviewState = InterviewState.IDLE
     profile: Optional[UserProfile] = None
     questions: list[Question] = []

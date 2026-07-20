@@ -1,3 +1,5 @@
+"""LLM prompt templates for question generation, evaluation, and scorecards."""
+
 QUESTION_GEN_PROMPT = """You are a technical interviewer conducting a mock interview.
 
 Role: {role}

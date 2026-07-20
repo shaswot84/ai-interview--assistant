@@ -1,3 +1,5 @@
+"""Shared pytest fixtures for use across all test modules."""
+
 import pytest
 
 from schemas import (
@@ -12,6 +14,7 @@ from schemas import (
 
 @pytest.fixture
 def sample_profile() -> UserProfile:
+    """A standard UserProfile (Senior Backend Engineer in FinTech)."""
     return UserProfile(
         role="Backend Engineer",
         seniority=Seniority.SENIOR,
@@ -22,6 +25,7 @@ def sample_profile() -> UserProfile:
 
 @pytest.fixture
 def sample_questions() -> list[Question]:
+    """Five sample questions (3 technical, 2 behavioural)."""
     return [
         Question(id="q1", text="What is REST?", category=QuestionCategory.TECHNICAL),
         Question(id="q2", text="Explain ACID.", category=QuestionCategory.TECHNICAL),
@@ -33,6 +37,7 @@ def sample_questions() -> list[Question]:
 
 @pytest.fixture
 def sample_evaluation() -> Evaluation:
+    """A mid-range Evaluation fixture."""
     return Evaluation(
         clarity=8,
         completeness=7,
@@ -47,6 +52,7 @@ def sample_evaluation() -> Evaluation:
 
 @pytest.fixture
 def sample_state(sample_profile, sample_questions) -> SessionState:
+    """A fully populated SessionState with profile, questions, and partial transcript."""
     return SessionState(
         profile=sample_profile,
         questions=sample_questions,

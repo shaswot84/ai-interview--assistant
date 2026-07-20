@@ -1,3 +1,5 @@
+"""Edge-case tests — injection resistance, score clamping, retry exhaustion, fallback, isolation."""
+
 from unittest.mock import MagicMock, patch
 
 import httpx
@@ -6,7 +8,6 @@ from openai import APIError, RateLimitError
 
 from llm_client import (
     _EvaluationResponse,
-    _ScorecardResponse,
     QuestionsResponse,
     _call_with_retry,
     evaluate_answer,
@@ -37,6 +38,7 @@ A_QUESTION = Question(id="q1", text="Test?", category=QuestionCategory.TECHNICAL
 
 
 def _mock_chat_completion(content: str | None):
+    """Return a mock OpenAI chat completion (content may be None)."""
     mock_message = MagicMock()
     mock_message.content = content
     mock_choice = MagicMock()
@@ -47,6 +49,8 @@ def _mock_chat_completion(content: str | None):
 
 
 class TestInjectionResistance:
+    """Verify score clamping and injection-guard presence in the evaluation prompt."""
+
     @patch("llm_client._call_with_retry")
     def test_out_of_range_scores_are_clamped(self, mock_call):
         mock_call.return_value = _EvaluationResponse(
@@ -79,6 +83,8 @@ class TestInjectionResistance:
 
 
 class TestMalformedJSON:
+    """Malformed or null LLM responses should trigger retries then raise."""
+
     @patch("llm_client.get_openai_client")
     def test_malformed_json_retries_then_fails(self, mock_get_client):
         mock_client = MagicMock()
@@ -109,6 +115,8 @@ class TestMalformedJSON:
 
 
 class TestRetryExhaustion:
+    """APIError and RateLimitError should exhaust retries then raise."""
+
     @patch("llm_client.get_openai_client")
     def test_api_error_retries_then_raises(self, mock_get_client):
         mock_client = MagicMock()
@@ -151,6 +159,8 @@ class TestRetryExhaustion:
 
 
 class TestAllSkipped:
+    """Edge cases when no evaluations exist."""
+
     def test_overall_score_zero_when_no_evaluations(self):
         assert calculate_overall_score({}) == 0.0
 
@@ -171,6 +181,8 @@ class TestAllSkipped:
 
 
 class TestFallback:
+    """Verify the static fallback question bank returns the correct ratio."""
+
     def test_fallback_questions_returns_correct_ratio(self):
         from fallback_data import fallback_questions
         result = fallback_questions(A_PROFILE, needed=5)

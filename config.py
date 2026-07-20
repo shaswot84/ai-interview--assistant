@@ -1,3 +1,5 @@
+"""Application configuration loaded from environment variables."""
+
 import os
 from dataclasses import dataclass
 from dotenv import load_dotenv
@@ -7,6 +9,8 @@ load_dotenv()
 
 @dataclass
 class Config:
+    """Runtime configuration values, all sourced from environment variables."""
+
     llm_provider: str = "openai"
     openai_api_key: str = ""
     openai_base_url: str = ""
@@ -15,6 +19,7 @@ class Config:
 
     @classmethod
     def from_env(cls) -> "Config":
+        """Build a Config by reading the .env file / environment."""
         return cls(
             llm_provider=os.getenv("LLM_PROVIDER", "openai"),
             openai_api_key=os.getenv("OPENAI_API_KEY", ""),
@@ -24,4 +29,5 @@ class Config:
         )
 
 
+# Singleton config instance used throughout the application
 config = Config.from_env()

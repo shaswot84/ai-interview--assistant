@@ -1,3 +1,5 @@
+"""Tests for Pydantic schema validation — field constraints, enums, and defaults."""
+
 import pytest
 from pydantic import ValidationError
 
@@ -14,6 +16,8 @@ from schemas import (
 
 
 class TestUserProfile:
+    """UserProfile field validation — role length, seniority enum."""
+
     def test_valid_profile(self):
         profile = UserProfile(
             role="Backend Engineer",
@@ -43,6 +47,8 @@ class TestUserProfile:
 
 
 class TestQuestion:
+    """Question should accept valid category values."""
+
     def test_valid_question(self):
         q = Question(
             id="q1", text="What is OOP?", category=QuestionCategory.TECHNICAL
@@ -51,6 +57,8 @@ class TestQuestion:
 
 
 class TestEvaluation:
+    """Evaluation scores must be in the 1–10 range for all dimensions."""
+
     def test_valid_evaluation(self):
         eval_ = Evaluation(
             clarity=8,
@@ -103,6 +111,8 @@ class TestEvaluation:
 
 
 class TestScorecard:
+    """Scorecard must use a valid LetterGrade enum value."""
+
     def test_valid_scorecard(self):
         sc = Scorecard(
             strengths=["Good communication"],
@@ -125,6 +135,8 @@ class TestScorecard:
 
 
 class TestSessionState:
+    """SessionState defaults and full construction."""
+
     def test_default_state_is_idle(self):
         state = SessionState()
         assert state.current_state.value == "IDLE"

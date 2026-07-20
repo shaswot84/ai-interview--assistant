@@ -1,3 +1,5 @@
+"""Tests for the LLM client — retry logic, question generation, evaluation, and scorecards."""
+
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -23,6 +25,7 @@ from schemas import (
 
 
 def _mock_chat_completion(content: str):
+    """Return a mock OpenAI chat completion with the given string content."""
     mock_message = MagicMock()
     mock_message.content = content
     mock_choice = MagicMock()
@@ -76,6 +79,7 @@ VALID_SCORECARD_JSON = """{
 
 
 class TestCallWithRetry:
+    """_call_with_retry — success path and retry exhaustion."""
     @patch("llm_client.get_openai_client")
     def test_returns_parsed_model(self, mock_get_client):
         mock_client = MagicMock()
@@ -106,6 +110,7 @@ class TestCallWithRetry:
 
 
 class TestGenerateQuestions:
+    """generate_questions — LLM success and fallback paths."""
     @patch("llm_client._call_with_retry")
     def test_returns_questions_from_llm(self, mock_call):
         expected = [
@@ -129,6 +134,7 @@ class TestGenerateQuestions:
 
 
 class TestEvaluateAnswer:
+    """evaluate_answer — validates the returned Evaluation object."""
     @patch("llm_client._call_with_retry")
     def test_returns_evaluation(self, mock_call):
         mock_call.return_value = _EvaluationResponse(
@@ -147,6 +153,7 @@ class TestEvaluateAnswer:
 
 
 class TestSynthesizeScorecard:
+    """synthesize_scorecard — validates Scorecard output and profile requirement."""
     @patch("llm_client._call_with_retry")
     def test_returns_scorecard(self, mock_call):
         mock_call.return_value = _ScorecardResponse(

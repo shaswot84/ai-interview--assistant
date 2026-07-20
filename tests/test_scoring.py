@@ -1,3 +1,5 @@
+"""Tests for the scoring engine — weighted scores, letter grades, radar chart data."""
+
 import pytest
 from schemas import Evaluation, LetterGrade
 from scoring import (
@@ -13,6 +15,7 @@ from scoring import (
 def _eval(
     clarity=5, completeness=5, relevance=5, grammar=5, impact=5,
 ) -> Evaluation:
+    """Helper — build an Evaluation with the given scores and empty strings."""
     return Evaluation(
         clarity=clarity,
         completeness=completeness,
@@ -26,6 +29,8 @@ def _eval(
 
 
 class TestCalculateQuestionScore:
+    """Verify weighted scoring produces correct results for edge and middle values."""
+
     def test_all_max_returns_100(self):
         e = _eval(clarity=10, completeness=10, relevance=10, grammar=10, impact=10)
         assert calculate_question_score(e) == 100.0
@@ -45,6 +50,8 @@ class TestCalculateQuestionScore:
 
 
 class TestCalculateOverallScore:
+    """Overall score averages individual question scores."""
+
     def test_average_of_multiple(self):
         evals = {
             "q1": _eval(clarity=5, completeness=5, relevance=5, grammar=5, impact=5),
@@ -57,6 +64,8 @@ class TestCalculateOverallScore:
 
 
 class TestGetLetterGrade:
+    """Letter grade boundaries: A≥90, B≥80, C≥70, D≥60, F<60."""
+
     def test_a_grade(self):
         assert get_letter_grade(95) == LetterGrade.A
 
@@ -81,6 +90,8 @@ class TestGetLetterGrade:
 
 
 class TestPrepareRadarChartData:
+    """Radar chart data averages each dimension across all evaluations."""
+
     def test_returns_averages(self):
         evals = {
             "q1": _eval(clarity=10, completeness=8, relevance=6, grammar=4, impact=2),
@@ -99,6 +110,8 @@ class TestPrepareRadarChartData:
 
 
 class TestRenderRadarChart:
+    """render_radar_chart should return a Plotly Figure with data."""
+
     def test_returns_figure(self):
         data = {"clarity": 8.0, "completeness": 7.0, "relevance": 9.0, "grammar": 6.0, "impact": 8.0}
         fig = render_radar_chart(data)

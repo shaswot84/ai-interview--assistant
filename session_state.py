@@ -1,3 +1,5 @@
+"""State machine — guards all session state transitions with a whitelist of valid moves."""
+
 from __future__ import annotations
 
 from datetime import datetime, timezone
@@ -7,7 +9,7 @@ from timer import is_timed_out
 
 
 class InvalidTransitionError(ValueError):
-    pass
+    """Raised when an action is not allowed from the current state."""
 
 
 VALID_TRANSITIONS: dict[InterviewState, list[tuple[str, InterviewState]]] = {
@@ -32,6 +34,12 @@ VALID_TRANSITIONS: dict[InterviewState, list[tuple[str, InterviewState]]] = {
 
 
 def transition(state: SessionState, action: str) -> SessionState:
+    """Return a deep-copied SessionState after applying `action`.
+    
+    Automatically converts `submit_answer` to `timeout_skip` if the question
+    timer has expired. Raises InvalidTransitionError if the action is not
+    listed in VALID_TRANSITIONS for the current state.
+    """
     if (
         state.current_state == InterviewState.INTERVIEWING
         and action == "submit_answer"

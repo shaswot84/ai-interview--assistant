@@ -1,3 +1,5 @@
+"""Tests for Markdown and PDF export — output format, content, and file creation."""
+
 from schemas import (
     Evaluation,
     LetterGrade,
@@ -44,6 +46,8 @@ SAMPLE_STATE = SessionState(
 
 
 class TestGenerateMarkdownTranscript:
+    """Markdown transcript should include profile, Q&A, scores, and scorecard."""
+
     def test_includes_profile(self):
         md = generate_markdown_transcript(SAMPLE_STATE)
         assert "Backend Engineer" in md
@@ -76,6 +80,8 @@ class TestGenerateMarkdownTranscript:
 
 
 class TestGeneratePDF:
+    """PDF export should produce a valid PDF binary file."""
+
     def test_creates_pdf_file(self, tmp_path):
         path = str(tmp_path / "test.pdf")
         result = generate_pdf(SAMPLE_STATE, path)

@@ -1,3 +1,5 @@
+"""Tests for the session state machine — valid/invalid transitions and timer auto-skip."""
+
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -14,6 +16,7 @@ from session_state import InvalidTransitionError, transition
 
 
 def _state_with_questions(n: int = 3, state: InterviewState = InterviewState.IDLE) -> SessionState:
+    """Helper — build a SessionState with n questions at the given state."""
     questions = [
         Question(id=f"q{i}", text=f"Question {i}?", category=QuestionCategory.TECHNICAL)
         for i in range(n)
@@ -33,6 +36,8 @@ def _state_with_questions(n: int = 3, state: InterviewState = InterviewState.IDL
 
 
 class TestInvalidTransition:
+    """Actions that should not be allowed from the current state."""
+
     def test_raises_on_illegal_action(self):
         state = SessionState(current_state=InterviewState.IDLE)
         with pytest.raises(InvalidTransitionError):
@@ -45,6 +50,8 @@ class TestInvalidTransition:
 
 
 class TestValidTransitions:
+    """Every allowed state → action pair must produce the expected next state."""
+
     def test_idle_to_onboarding(self):
         state = SessionState(current_state=InterviewState.IDLE)
         result = transition(state, "start")
@@ -102,6 +109,8 @@ class TestValidTransitions:
 
 
 class TestTimerAutoSkip:
+    """submit_answer should auto-convert to timeout_skip when the timer has expired."""
+
     def test_auto_skip_when_timed_out(self):
         limit = 180
         state = _state_with_questions(state=InterviewState.INTERVIEWING)
@@ -117,6 +126,8 @@ class TestTimerAutoSkip:
 
 
 class TestQuestionIndexManagement:
+    """Verify that next_question resets the timer."""
+
     def test_next_question_sets_timer(self):
         state = _state_with_questions(state=InterviewState.FEEDBACK)
         state.question_started_at = None

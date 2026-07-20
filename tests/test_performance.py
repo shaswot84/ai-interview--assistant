@@ -1,3 +1,5 @@
+"""Performance benchmarks — latency targets for LLM calls (requires API key)."""
+
 import os
 import time
 
@@ -8,6 +10,7 @@ load_dotenv()
 
 
 def _key_is_placeholder(key: str | None) -> bool:
+    """Return True if the API key is missing or set to a placeholder value."""
     if not key:
         return True
     key = key.strip()
@@ -23,6 +26,7 @@ pytestmark = pytest.mark.skipif(not HAS_KEY, reason="OpenAI API key not configur
 
 @pytest.fixture
 def profile():
+    """Standard profile for performance tests."""
     from schemas import Seniority, UserProfile
     return UserProfile(
         role="Backend Engineer",
@@ -34,6 +38,7 @@ def profile():
 
 @pytest.fixture
 def sample_questions():
+    """Five sample questions for evaluation/scorecard benchmarks."""
     from schemas import Question, QuestionCategory
     return [
         Question(id="q1", text="What is REST?", category=QuestionCategory.TECHNICAL),
@@ -46,6 +51,7 @@ def sample_questions():
 
 @pytest.mark.slow
 def test_question_generation_latency(profile):
+    """Question generation should complete in under 3 seconds."""
     from llm_client import generate_questions
     start = time.time()
     questions = generate_questions(profile)
@@ -56,6 +62,7 @@ def test_question_generation_latency(profile):
 
 @pytest.mark.slow
 def test_answer_evaluation_latency(profile, sample_questions):
+    """Answer evaluation should complete in under 3 seconds."""
     from llm_client import evaluate_answer
     answer = "REST is an architectural style that uses HTTP methods for CRUD operations on resources."
     start = time.time()
@@ -67,6 +74,7 @@ def test_answer_evaluation_latency(profile, sample_questions):
 
 @pytest.mark.slow
 def test_scorecard_synthesis_latency(profile, sample_questions):
+    """Scorecard synthesis should complete in under 3 seconds."""
     from llm_client import synthesize_scorecard
     from schemas import SessionState, Evaluation
     state = SessionState(profile=profile, questions=sample_questions)

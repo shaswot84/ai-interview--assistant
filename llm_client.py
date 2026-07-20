@@ -1,3 +1,5 @@
+"""LLM client — handles question generation, answer evaluation, and scorecard synthesis."""
+
 import time
 from typing import TypeVar
 
@@ -14,10 +16,12 @@ T = TypeVar("T", bound=BaseModel)
 
 
 class QuestionsResponse(BaseModel):
+    """Pydantic model for the LLM's question-generation response."""
     questions: list[Question]
 
 
 class _EvaluationResponse(BaseModel):
+    """Internal Pydantic model for the LLM's evaluation response (raw scores)."""
     clarity: int
     completeness: int
     relevance: int
@@ -29,6 +33,7 @@ class _EvaluationResponse(BaseModel):
 
 
 class _ScorecardResponse(BaseModel):
+    """Internal Pydantic model for the LLM's scorecard response."""
     strengths: list[str]
     improvements: list[str]
     model_answer: str
@@ -41,6 +46,7 @@ def _call_with_retry(
     response_model: type[T],
     max_retries: int = 2,
 ) -> T:
+    """Call the LLM with exponential backoff retry. Raises RuntimeError after exhaustion."""
     client = get_openai_client()
     last_error = None
     for attempt in range(max_retries):
@@ -49,7 +55,7 @@ def _call_with_retry(
                 model=config.openai_model,
                 messages=messages,
                 response_format={"type": "json_object"},
-                temperature=0.7,
+                temperature=0.7,  # adjust this tempr accordingly
             )
             content = response.choices[0].message.content
             if content is None:
@@ -63,6 +69,10 @@ def _call_with_retry(
 
 
 def generate_questions(profile: UserProfile) -> list[Question]:
+    """Generate 5 interview questions (3 technical, 2 behavioural) for the given profile.
+    
+    Falls back to static questions from fallback_data if the LLM call fails.
+    """
     try:
         messages = [
             {
@@ -92,6 +102,10 @@ def evaluate_answer(
     answer: str,
     profile: UserProfile,
 ) -> Evaluation:
+    """Evaluate a single answer across five dimensions and return an Evaluation.
+    
+    Scores are clamped to the 1-10 range before returning.
+    """
     messages = [
         {
             "role": "system",
@@ -121,6 +135,7 @@ def evaluate_answer(
 
 
 def _format_transcript(state: SessionState) -> str:
+    """Format the full interview transcript as a string for the scorecard prompt."""
     lines: list[str] = []
     for q in state.questions:
         answer = state.transcript.get(q.id)
@@ -141,6 +156,10 @@ def _format_transcript(state: SessionState) -> str:
 
 
 def synthesize_scorecard(state: SessionState) -> Scorecard:
+    """Synthesise a final scorecard from the full session state.
+    
+    Raises ValueError if the session has no profile.
+    """
     transcript = _format_transcript(state)
     profile = state.profile
     if profile is None:

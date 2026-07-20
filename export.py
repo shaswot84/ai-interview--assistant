@@ -1,3 +1,5 @@
+"""Export utilities — generates Markdown transcripts and PDF documents with radar charts."""
+
 import re
 
 import plotly.io as pio
@@ -6,6 +8,7 @@ from schemas import SessionState
 
 
 def _md_to_html(md: str) -> str:
+    """Convert a small subset of Markdown to inline HTML for WeasyPrint."""
     html_parts: list[str] = []
     for line in md.split("\n"):
         if line.startswith("# "):
@@ -26,6 +29,7 @@ def _md_to_html(md: str) -> str:
 
 
 def _html_document(body_html: str) -> str:
+    """Wrap body HTML in a full <html> document with basic styling."""
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -46,6 +50,7 @@ def _html_document(body_html: str) -> str:
 
 
 def generate_markdown_transcript(state: SessionState) -> str:
+    """Build a Markdown transcript string from the session state (profile, Q&A, scorecard)."""
     lines: list[str] = ["# Interview Transcript", ""]
     if state.profile:
         lines.append(f"**Role:** {state.profile.role}")
@@ -85,6 +90,7 @@ def generate_markdown_transcript(state: SessionState) -> str:
 
 
 def _radar_chart_html(state: SessionState) -> str:
+    """Render the radar chart as a base64-embedded PNG <img> tag for PDF inclusion."""
     if not state.evaluations:
         return ""
     from scoring import prepare_radar_chart_data, render_radar_chart
@@ -97,6 +103,7 @@ def _radar_chart_html(state: SessionState) -> str:
 
 
 def generate_pdf(state: SessionState, path: str) -> str:
+    """Generate a PDF at `path` from the session state via WeasyPrint."""
     from weasyprint import HTML
 
     md = generate_markdown_transcript(state)

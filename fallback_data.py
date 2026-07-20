@@ -1,5 +1,11 @@
+"""Static fallback question bank used when the LLM API is unavailable.
+
+Provides 10 questions per seniority level (5 technical + 5 behavioural).
+"""
+
 from schemas import Question, QuestionCategory, Seniority
 
+# Pool of static questions indexed by seniority level
 FALLBACK_QUESTIONS: dict[str, list[Question]] = {
     "Junior": [
         Question(id="f1", text="Explain the difference between a list and a tuple.", category=QuestionCategory.TECHNICAL),
@@ -53,6 +59,10 @@ FALLBACK_QUESTIONS: dict[str, list[Question]] = {
 
 
 def fallback_questions(profile, needed: int = 5) -> list[Question]:
+    """Return up to `needed` static questions from the fallback bank for the given seniority.
+    
+    Prioritises technical questions (3) then behavioural (2).
+    """
     key = profile.seniority.value if isinstance(profile.seniority, Seniority) else profile.seniority
     pool = FALLBACK_QUESTIONS.get(key, FALLBACK_QUESTIONS["Mid"])
     if len(pool) <= needed:

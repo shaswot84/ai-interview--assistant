@@ -1,3 +1,5 @@
+"""Chainlit UI controller — handles all chat lifecycle, onboarding, interviews, and export."""
+
 import asyncio
 from datetime import datetime, timezone
 
@@ -10,6 +12,7 @@ from scoring import get_letter_grade, prepare_radar_chart_data, render_radar_cha
 from session_state import transition
 from timer import get_timer_limit, is_timed_out
 
+# Onboarding field configuration
 ONBOARDING_FIELDS = ["role", "seniority", "industry"]
 ONBOARDING_PROMPTS = [
     "What is your target **role**? (e.g. Backend Engineer)",
@@ -19,6 +22,11 @@ ONBOARDING_PROMPTS = [
 
 
 def _timer_bar_html(seconds: int) -> str:
+    """Generate an HTML/CSS countdown timer bar for a question.
+    
+    Renders a blue bar that shrinks from 100% to 0% width over `seconds`.
+    At 80% elapsed it turns red and blinks.
+    """
     blink_delay = seconds * 0.8
     return f"""<div style="margin:8px 0;">
   <div style="background:#e5e7eb;border-radius:6px;overflow:hidden;height:14px;">
@@ -32,15 +40,18 @@ def _timer_bar_html(seconds: int) -> str:
 
 
 def _get_state() -> SessionState:
+    """Retrieve the current session state from Chainlit's user session."""
     return cl.user_session.get("state", SessionState())
 
 
 def _set_state(state: SessionState) -> None:
+    """Persist `state` into Chainlit's user session."""
     cl.user_session.set("state", state)
 
 
 @cl.action_callback("skip")
 async def on_skip(action: cl.Action):
+    """Skip the current question and show feedback immediately."""
     state = _get_state()
     state = transition(state, "skip")
     state = transition(state, "evaluation_done")
@@ -50,6 +61,7 @@ async def on_skip(action: cl.Action):
 
 @cl.action_callback("end_early")
 async def on_end_early(action: cl.Action):
+    """End the interview early and jump to the scorecard."""
     state = _get_state()
     state = transition(state, "end_early")
     _set_state(state)
@@ -58,6 +70,7 @@ async def on_end_early(action: cl.Action):
 
 @cl.action_callback("next_question")
 async def on_next_question(action: cl.Action):
+    """Move to the next question and display it."""
     state = _get_state()
     state.current_question_index += 1
     state = transition(state, "next_question")
@@ -67,6 +80,7 @@ async def on_next_question(action: cl.Action):
 
 @cl.action_callback("finish")
 async def on_finish(action: cl.Action):
+    """Finish the interview (after the last question) and show the scorecard."""
     state = _get_state()
     state = transition(state, "finish")
     _set_state(state)
@@ -75,6 +89,7 @@ async def on_finish(action: cl.Action):
 
 @cl.action_callback("export_pdf")
 async def on_export_pdf(action: cl.Action):
+    """Export the full interview transcript as a PDF file."""
     state = _get_state()
     path = f"/tmp/interview_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.pdf"
     generate_pdf(state, path)
@@ -83,6 +98,7 @@ async def on_export_pdf(action: cl.Action):
 
 @cl.action_callback("export_md")
 async def on_export_md(action: cl.Action):
+    """Export the full interview transcript as a Markdown file."""
     state = _get_state()
     md = generate_markdown_transcript(state)
     path = f"/tmp/interview_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.md"
@@ -93,6 +109,7 @@ async def on_export_md(action: cl.Action):
 
 @cl.action_callback("retry_evaluation")
 async def on_retry_evaluation(action: cl.Action):
+    """Re-run the evaluation for the current question (e.g. after a failure)."""
     state = _get_state()
     q = state.questions[state.current_question_index]
     answer = state.transcript.get(q.id, "")
@@ -115,12 +132,14 @@ async def on_retry_evaluation(action: cl.Action):
 
 @cl.action_callback("restart")
 async def on_restart(action: cl.Action):
+    """Reset the session and restart the full interview flow."""
     _set_state(SessionState())
     await cl.Message(content="Starting a new interview session...").send()
     await _run_interview_core()
 
 
 async def _show_question(state: SessionState):
+    """Display the current question with a countdown timer bar and action buttons."""
     if state.current_question_index >= len(state.questions):
         state = transition(state, "finish")
         _set_state(state)
@@ -143,6 +162,7 @@ async def _show_question(state: SessionState):
 
 
 async def _handle_answer(state: SessionState, answer: str):
+    """Process a submitted answer: log transcript, evaluate, and display feedback."""
     q = state.questions[state.current_question_index]
     state.transcript[q.id] = answer
 
@@ -181,6 +201,7 @@ async def _handle_answer(state: SessionState, answer: str):
 
 
 async def _show_feedback(state: SessionState):
+    """Render the feedback message with scores, grammar correction, and navigation actions."""
     q = state.questions[state.current_question_index]
     eval_ = state.evaluations.get(q.id)
     is_last = state.current_question_index >= len(state.questions) - 1
@@ -228,6 +249,7 @@ async def _show_feedback(state: SessionState):
 
 
 async def _handle_completed(state: SessionState):
+    """Generate the final scorecard and display the debrief view."""
     msg = cl.Message(content="Generating your final scorecard...")
     await msg.send()
     try:
@@ -251,6 +273,7 @@ async def _handle_completed(state: SessionState):
 
 
 async def _show_scorecard(state: SessionState):
+    """Display the final scorecard with letter grade, radar chart, and export options."""
     sc = state.scorecard
     if sc is None:
         return
@@ -293,6 +316,7 @@ async def _show_scorecard(state: SessionState):
 
 @cl.on_chat_start
 async def on_chat_start():
+    """Entry point — initialise state, display welcome, and launch the interview flow."""
     _set_state(SessionState())
     await cl.Message(
         content="👋 Welcome to **AI Interview Assistant**!\n\n"
@@ -303,6 +327,7 @@ async def on_chat_start():
 
 
 async def _run_interview_core():
+    """Run the full onboarding → generation → first question flow inline."""
     state = _get_state()
     state = transition(state, "start")
     _set_state(state)
@@ -362,6 +387,7 @@ async def _run_interview_core():
 
 @cl.on_message
 async def on_message(message: cl.Message):
+    """Handle incoming user messages — route by current interview state."""
     state = _get_state()
     text = message.content.strip()
 
