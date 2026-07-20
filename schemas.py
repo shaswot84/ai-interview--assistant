@@ -21,6 +21,7 @@ class QuestionCategory(str, Enum):
     """Type of interview question."""
     TECHNICAL = "technical"
     BEHAVIOURAL = "behavioural"
+    BEHAVIORAL = "behavioral"
 
 
 class InterviewState(str, Enum):
@@ -53,10 +54,12 @@ class UserProfile(BaseModel):
 
 
 class Question(BaseModel):
-    """An interview question with an identifier and category."""
+    """An interview question with an identifier, category, and metadata."""
     id: str
     text: str
     category: QuestionCategory
+    difficulty: str = ""
+    expected_keywords: list[str] = []
 
 
 class Evaluation(BaseModel):

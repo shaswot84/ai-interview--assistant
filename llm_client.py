@@ -8,7 +8,7 @@ from pydantic import BaseModel
 
 from config import config
 from fallback_data import fallback_questions
-from prompts import EVALUATION_PROMPT, QUESTION_GEN_PROMPT, SCORECARD_PROMPT
+from prompts import EVALUATION_PROMPT, SCORECARD_PROMPT, get_question_prompt
 from providers import get_openai_client
 from schemas import Evaluation, Question, Scorecard, SessionState, UserProfile
 
@@ -45,6 +45,7 @@ def _call_with_retry(
     messages: list[dict],
     response_model: type[T],
     max_retries: int = 2,
+    temperature: float = 0.7,
 ) -> T:
     """Call the LLM with exponential backoff retry. Raises RuntimeError after exhaustion."""
     client = get_openai_client()
@@ -55,7 +56,7 @@ def _call_with_retry(
                 model=config.openai_model,
                 messages=messages,
                 response_format={"type": "json_object"},
-                temperature=0.7,  # adjust this tempr accordingly
+                temperature=temperature,
             )
             content = response.choices[0].message.content
             if content is None:
@@ -75,14 +76,7 @@ def generate_questions(profile: UserProfile) -> list[Question]:
     """
     try:
         messages = [
-            {
-                "role": "system",
-                "content": QUESTION_GEN_PROMPT.format(
-                    role=profile.role,
-                    seniority=profile.seniority.value,
-                    industry=profile.industry,
-                ),
-            },
+            {"role": "system", "content": get_question_prompt(profile)},
             {
                 "role": "user",
                 "content": (
@@ -91,7 +85,7 @@ def generate_questions(profile: UserProfile) -> list[Question]:
                 ),
             },
         ]
-        result = _call_with_retry(messages, QuestionsResponse)
+        result = _call_with_retry(messages, QuestionsResponse, temperature=config.generation_temperature)
         return result.questions
     except Exception:
         return fallback_questions(profile, needed=5)
@@ -121,7 +115,7 @@ def evaluate_answer(
             "content": f"Evaluate this answer to: {question.text}",
         },
     ]
-    result = _call_with_retry(messages, _EvaluationResponse)
+    result = _call_with_retry(messages, _EvaluationResponse, temperature=config.evaluation_temperature)
     return Evaluation(
         clarity=max(1, min(10, result.clarity)),
         completeness=max(1, min(10, result.completeness)),
@@ -178,7 +172,7 @@ def synthesize_scorecard(state: SessionState) -> Scorecard:
             "content": "Synthesize the final scorecard for this interview.",
         },
     ]
-    result = _call_with_retry(messages, _ScorecardResponse)
+    result = _call_with_retry(messages, _ScorecardResponse, temperature=config.scorecard_temperature)
     return Scorecard(
         strengths=result.strengths,
         improvements=result.improvements,

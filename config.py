@@ -16,6 +16,9 @@ class Config:
     openai_base_url: str = ""
     openai_model: str = "gpt-4o-mini"
     question_timer_seconds: int = 180
+    generation_temperature: float = 0.9
+    evaluation_temperature: float = 0.3
+    scorecard_temperature: float = 0.3
 
     @classmethod
     def from_env(cls) -> "Config":
@@ -26,6 +29,9 @@ class Config:
             openai_base_url=os.getenv("OPENAI_BASE_URL", ""),
             openai_model=os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
             question_timer_seconds=int(os.getenv("QUESTION_TIMER_SECONDS", "180")),
+            generation_temperature=float(os.getenv("GENERATION_TEMPERATURE", "0.9")),
+            evaluation_temperature=float(os.getenv("EVALUATION_TEMPERATURE", "0.3")),
+            scorecard_temperature=float(os.getenv("SCORECARD_TEMPERATURE", "0.3")),
         )
 
 
