@@ -8,7 +8,7 @@ from pydantic import BaseModel
 
 from config import config
 from fallback_data import fallback_questions
-from prompts import EVALUATION_PROMPT, SCORECARD_PROMPT, get_question_prompt
+from prompts import SCORECARD_PROMPT, get_evaluation_prompt, get_question_prompt
 from providers import get_openai_client
 from schemas import Evaluation, Question, Scorecard, SessionState, UserProfile
 
@@ -103,12 +103,7 @@ def evaluate_answer(
     messages = [
         {
             "role": "system",
-            "content": EVALUATION_PROMPT.format(
-                question=question.text,
-                answer=answer,
-                role=profile.role,
-                seniority=profile.seniority.value,
-            ),
+            "content": get_evaluation_prompt(question.text, answer, profile),
         },
         {
             "role": "user",
