@@ -63,12 +63,18 @@ class Question(BaseModel):
 
 
 class Evaluation(BaseModel):
-    """Scores for a single answer across five dimensions."""
+    """Scores for a single answer across communication and technical dimensions."""
     clarity: int = Field(..., ge=1, le=10)
     completeness: int = Field(..., ge=1, le=10)
     relevance: int = Field(..., ge=1, le=10)
     grammar: int = Field(..., ge=1, le=10)
     impact: int = Field(..., ge=1, le=10)
+    technical_depth: int = Field(..., ge=1, le=10)
+    architecture_design: int = Field(..., ge=1, le=10)
+    problem_solving: int = Field(..., ge=1, le=10)
+    tradeoff_analysis: int = Field(..., ge=1, le=10)
+    strengths: list[str]
+    weaknesses: list[str]
     grammar_correction: str
     simplified_version: str
     actionable_feedback: str

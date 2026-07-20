@@ -64,6 +64,12 @@ VALID_EVALUATION_JSON = """{
   "relevance": 9,
   "grammar": 6,
   "impact": 8,
+  "technical_depth": 7,
+  "architecture_design": 6,
+  "problem_solving": 8,
+  "tradeoff_analysis": 6,
+  "strengths": ["Clear", "Structured", "Relevant"],
+  "weaknesses": ["Depth", "Trade-offs", "Grammar"],
   "grammar_correction": "Fixed grammar.",
   "simplified_version": "Simpler version.",
   "actionable_feedback": "Be more specific."
@@ -143,6 +149,12 @@ class TestEvaluateAnswer:
             relevance=9,
             grammar=6,
             impact=8,
+            technical_depth=7,
+            architecture_design=6,
+            problem_solving=8,
+            tradeoff_analysis=6,
+            strengths=["Clear", "Structured", "Relevant"],
+            weaknesses=["Depth", "Trade-offs", "Grammar"],
             grammar_correction="Fixed.",
             simplified_version="Simple.",
             actionable_feedback="More detail.",
@@ -150,6 +162,8 @@ class TestEvaluateAnswer:
         result = evaluate_answer(A_QUESTION, "My answer", A_PROFILE)
         assert isinstance(result, Evaluation)
         assert result.clarity == 8
+        assert result.technical_depth == 7
+        assert result.strengths == ["Clear", "Structured", "Relevant"]
 
 
 class TestSynthesizeScorecard:

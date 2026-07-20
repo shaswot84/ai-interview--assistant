@@ -55,6 +55,8 @@ class TestInjectionResistance:
     def test_out_of_range_scores_are_clamped(self, mock_call):
         mock_call.return_value = _EvaluationResponse(
             clarity=100, completeness=-5, relevance=999, grammar=0, impact=11,
+            technical_depth=50, architecture_design=-1, problem_solving=200, tradeoff_analysis=0,
+            strengths=[], weaknesses=[],
             grammar_correction="", simplified_version="", actionable_feedback="",
         )
         result = evaluate_answer(A_QUESTION, "malicious answer", A_PROFILE)
@@ -63,15 +65,21 @@ class TestInjectionResistance:
         assert result.relevance == 10
         assert result.grammar == 1
         assert result.impact == 10
+        assert result.technical_depth == 10
+        assert result.architecture_design == 1
+        assert result.problem_solving == 10
+        assert result.tradeoff_analysis == 1
 
-    def test_injection_guard_in_prompt(self):
-        from prompts import EVALUATION_PROMPT, INJECTION_GUARD
-        assert INJECTION_GUARD in EVALUATION_PROMPT
+    def test_injection_guard_placeholder_in_prompt(self):
+        from prompts import EVALUATION_PROMPT
+        assert "{injection_guard}" in EVALUATION_PROMPT
 
     @patch("llm_client._call_with_retry")
     def test_legitimate_scores_unchanged(self, mock_call):
         mock_call.return_value = _EvaluationResponse(
             clarity=3, completeness=4, relevance=5, grammar=6, impact=7,
+            technical_depth=8, architecture_design=2, problem_solving=9, tradeoff_analysis=4,
+            strengths=["A", "B", "C"], weaknesses=["D", "E", "F"],
             grammar_correction="x", simplified_version="y", actionable_feedback="z",
         )
         result = evaluate_answer(A_QUESTION, "good answer", A_PROFILE)
@@ -80,6 +88,10 @@ class TestInjectionResistance:
         assert result.relevance == 5
         assert result.grammar == 6
         assert result.impact == 7
+        assert result.technical_depth == 8
+        assert result.architecture_design == 2
+        assert result.problem_solving == 9
+        assert result.tradeoff_analysis == 4
 
 
 class TestMalformedJSON:

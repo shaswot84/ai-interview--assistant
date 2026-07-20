@@ -14,6 +14,7 @@ from scoring import (
 
 def _eval(
     clarity=5, completeness=5, relevance=5, grammar=5, impact=5,
+    technical_depth=5, architecture_design=5, problem_solving=5, tradeoff_analysis=5,
 ) -> Evaluation:
     """Helper — build an Evaluation with the given scores and empty strings."""
     return Evaluation(
@@ -22,6 +23,12 @@ def _eval(
         relevance=relevance,
         grammar=grammar,
         impact=impact,
+        technical_depth=technical_depth,
+        architecture_design=architecture_design,
+        problem_solving=problem_solving,
+        tradeoff_analysis=tradeoff_analysis,
+        strengths=[],
+        weaknesses=[],
         grammar_correction="",
         simplified_version="",
         actionable_feedback="",
@@ -32,21 +39,25 @@ class TestCalculateQuestionScore:
     """Verify weighted scoring produces correct results for edge and middle values."""
 
     def test_all_max_returns_100(self):
-        e = _eval(clarity=10, completeness=10, relevance=10, grammar=10, impact=10)
+        e = _eval(clarity=10, completeness=10, relevance=10, grammar=10, impact=10,
+                  technical_depth=10, architecture_design=10, problem_solving=10, tradeoff_analysis=10)
         assert calculate_question_score(e) == 100.0
 
     def test_all_min_returns_10(self):
-        e = _eval(clarity=1, completeness=1, relevance=1, grammar=1, impact=1)
+        e = _eval(clarity=1, completeness=1, relevance=1, grammar=1, impact=1,
+                  technical_depth=1, architecture_design=1, problem_solving=1, tradeoff_analysis=1)
         assert calculate_question_score(e) == 10.0
 
     def test_mid_range(self):
-        e = _eval(clarity=5, completeness=5, relevance=5, grammar=5, impact=5)
+        e = _eval(clarity=5, completeness=5, relevance=5, grammar=5, impact=5,
+                  technical_depth=5, architecture_design=5, problem_solving=5, tradeoff_analysis=5)
         assert calculate_question_score(e) == 50.0
 
     def test_weights_are_correct(self):
-        e = _eval(clarity=10, completeness=1, relevance=1, grammar=1, impact=1)
+        e = _eval(clarity=10, completeness=1, relevance=1, grammar=1, impact=1,
+                  technical_depth=1, architecture_design=1, problem_solving=1, tradeoff_analysis=1)
         score = calculate_question_score(e)
-        assert score == pytest.approx(10 * 10 * 0.15 + 1 * 10 * 0.85, rel=0.1)
+        assert score == pytest.approx(10 * 10 * 0.10 + 1 * 10 * 0.90, rel=0.1)
 
 
 class TestCalculateOverallScore:
@@ -54,8 +65,10 @@ class TestCalculateOverallScore:
 
     def test_average_of_multiple(self):
         evals = {
-            "q1": _eval(clarity=5, completeness=5, relevance=5, grammar=5, impact=5),
-            "q2": _eval(clarity=10, completeness=10, relevance=10, grammar=10, impact=10),
+            "q1": _eval(clarity=5, completeness=5, relevance=5, grammar=5, impact=5,
+                        technical_depth=5, architecture_design=5, problem_solving=5, tradeoff_analysis=5),
+            "q2": _eval(clarity=10, completeness=10, relevance=10, grammar=10, impact=10,
+                        technical_depth=10, architecture_design=10, problem_solving=10, tradeoff_analysis=10),
         }
         assert calculate_overall_score(evals) == 75.0
 
@@ -94,7 +107,8 @@ class TestPrepareRadarChartData:
 
     def test_returns_averages(self):
         evals = {
-            "q1": _eval(clarity=10, completeness=8, relevance=6, grammar=4, impact=2),
+            "q1": _eval(clarity=10, completeness=8, relevance=6, grammar=4, impact=2,
+                        technical_depth=3, architecture_design=5, problem_solving=7, tradeoff_analysis=9),
         }
         data = prepare_radar_chart_data(evals)
         assert data["clarity"] == 10.0
@@ -102,6 +116,10 @@ class TestPrepareRadarChartData:
         assert data["relevance"] == 6.0
         assert data["grammar"] == 4.0
         assert data["impact"] == 2.0
+        assert data["technical_depth"] == 3.0
+        assert data["architecture_design"] == 5.0
+        assert data["problem_solving"] == 7.0
+        assert data["tradeoff_analysis"] == 9.0
 
     def test_returns_zeros_for_empty(self):
         data = prepare_radar_chart_data({})
@@ -113,7 +131,10 @@ class TestRenderRadarChart:
     """render_radar_chart should return a Plotly Figure with data."""
 
     def test_returns_figure(self):
-        data = {"clarity": 8.0, "completeness": 7.0, "relevance": 9.0, "grammar": 6.0, "impact": 8.0}
+        data = {
+            "clarity": 8.0, "completeness": 7.0, "relevance": 9.0, "grammar": 6.0, "impact": 8.0,
+            "technical_depth": 7.0, "architecture_design": 8.0, "problem_solving": 9.0, "tradeoff_analysis": 6.0,
+        }
         fig = render_radar_chart(data)
         assert fig.data is not None
         assert len(fig.data) > 0

@@ -66,6 +66,12 @@ class TestEvaluation:
             relevance=9,
             grammar=6,
             impact=8,
+            technical_depth=7,
+            architecture_design=6,
+            problem_solving=8,
+            tradeoff_analysis=7,
+            strengths=["S1", "S2", "S3"],
+            weaknesses=["W1", "W2", "W3"],
             grammar_correction="Fixed grammar.",
             simplified_version="Simple version.",
             actionable_feedback="Be more specific.",
@@ -80,6 +86,12 @@ class TestEvaluation:
                 relevance=5,
                 grammar=5,
                 impact=5,
+                technical_depth=5,
+                architecture_design=5,
+                problem_solving=5,
+                tradeoff_analysis=5,
+                strengths=[],
+                weaknesses=[],
                 grammar_correction="x",
                 simplified_version="y",
                 actionable_feedback="z",
@@ -93,21 +105,30 @@ class TestEvaluation:
                 relevance=5,
                 grammar=5,
                 impact=5,
+                technical_depth=5,
+                architecture_design=5,
+                problem_solving=5,
+                tradeoff_analysis=5,
+                strengths=[],
+                weaknesses=[],
                 grammar_correction="x",
                 simplified_version="y",
                 actionable_feedback="z",
             )
 
     def test_rejects_any_dimension_out_of_bounds(self):
-        for field in ("completeness", "relevance", "grammar", "impact"):
+        all_dims = ("clarity", "completeness", "relevance", "grammar", "impact",
+                    "technical_depth", "architecture_design", "problem_solving", "tradeoff_analysis")
+        base = {
+            "clarity": 5, "completeness": 5, "relevance": 5, "grammar": 5, "impact": 5,
+            "technical_depth": 5, "architecture_design": 5, "problem_solving": 5, "tradeoff_analysis": 5,
+            "strengths": [], "weaknesses": [],
+            "grammar_correction": "x", "simplified_version": "y", "actionable_feedback": "z",
+        }
+        for field in all_dims:
+            kwargs = {**base, field: 11}
             with pytest.raises(ValidationError):
-                Evaluation(
-                    clarity=5,
-                    **{field: 11},
-                    grammar_correction="x",
-                    simplified_version="y",
-                    actionable_feedback="z",
-                )
+                Evaluation(**kwargs)
 
 
 class TestScorecard:

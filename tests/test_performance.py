@@ -82,6 +82,8 @@ def test_scorecard_synthesis_latency(profile, sample_questions):
     state.evaluations = {
         q.id: Evaluation(
             clarity=7, completeness=7, relevance=7, grammar=7, impact=7,
+            technical_depth=7, architecture_design=7, problem_solving=7, tradeoff_analysis=7,
+            strengths=[], weaknesses=[],
             grammar_correction="", simplified_version="", actionable_feedback="",
         ) for q in sample_questions
     }

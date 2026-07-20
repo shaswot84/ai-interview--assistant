@@ -5,17 +5,24 @@ import plotly.io as pio
 
 from schemas import Evaluation, LetterGrade
 
-# Weight distribution for the five evaluation dimensions
+# Weight distribution for communication and technical dimensions
 WEIGHTS = {
-    "clarity": 0.15,
-    "completeness": 0.25,
-    "relevance": 0.20,
-    "grammar": 0.10,
-    "impact": 0.30,
+    "clarity": 0.10,
+    "completeness": 0.10,
+    "relevance": 0.10,
+    "grammar": 0.05,
+    "impact": 0.10,
+    "technical_depth": 0.15,
+    "architecture_design": 0.15,
+    "problem_solving": 0.15,
+    "tradeoff_analysis": 0.10,
 }
 
 # Ordered list of dimension keys (used for radar chart labels)
-DIMENSIONS = ["clarity", "completeness", "relevance", "grammar", "impact"]
+DIMENSIONS = [
+    "clarity", "completeness", "relevance", "grammar", "impact",
+    "technical_depth", "architecture_design", "problem_solving", "tradeoff_analysis",
+]
 
 
 def calculate_question_score(eval_: Evaluation) -> float:
@@ -26,6 +33,10 @@ def calculate_question_score(eval_: Evaluation) -> float:
         + eval_.relevance * WEIGHTS["relevance"]
         + eval_.grammar * WEIGHTS["grammar"]
         + eval_.impact * WEIGHTS["impact"]
+        + eval_.technical_depth * WEIGHTS["technical_depth"]
+        + eval_.architecture_design * WEIGHTS["architecture_design"]
+        + eval_.problem_solving * WEIGHTS["problem_solving"]
+        + eval_.tradeoff_analysis * WEIGHTS["tradeoff_analysis"]
     )
     return round(score * 10, 1)
 
@@ -62,6 +73,10 @@ def prepare_radar_chart_data(evaluations: dict[str, Evaluation]) -> dict[str, fl
         totals["relevance"] += e.relevance
         totals["grammar"] += e.grammar
         totals["impact"] += e.impact
+        totals["technical_depth"] += e.technical_depth
+        totals["architecture_design"] += e.architecture_design
+        totals["problem_solving"] += e.problem_solving
+        totals["tradeoff_analysis"] += e.tradeoff_analysis
     n = len(evaluations)
     return {d: round(totals[d] / n, 1) for d in DIMENSIONS}
 

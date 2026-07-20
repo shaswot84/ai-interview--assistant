@@ -27,6 +27,12 @@ class _EvaluationResponse(BaseModel):
     relevance: int
     grammar: int
     impact: int
+    technical_depth: int
+    architecture_design: int
+    problem_solving: int
+    tradeoff_analysis: int
+    strengths: list[str]
+    weaknesses: list[str]
     grammar_correction: str
     simplified_version: str
     actionable_feedback: str
@@ -117,6 +123,12 @@ def evaluate_answer(
         relevance=max(1, min(10, result.relevance)),
         grammar=max(1, min(10, result.grammar)),
         impact=max(1, min(10, result.impact)),
+        technical_depth=max(1, min(10, result.technical_depth)),
+        architecture_design=max(1, min(10, result.architecture_design)),
+        problem_solving=max(1, min(10, result.problem_solving)),
+        tradeoff_analysis=max(1, min(10, result.tradeoff_analysis)),
+        strengths=result.strengths,
+        weaknesses=result.weaknesses,
         grammar_correction=result.grammar_correction,
         simplified_version=result.simplified_version,
         actionable_feedback=result.actionable_feedback,
