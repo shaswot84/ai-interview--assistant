@@ -136,7 +136,7 @@ class TestGenerateQuestions:
         mock_fallback.return_value = fallback_qs
         result = generate_questions(A_PROFILE)
         assert result == fallback_qs
-        mock_fallback.assert_called_once_with(A_PROFILE, needed=5)
+        mock_fallback.assert_called_once_with(A_PROFILE, needed=5, question_config=None)
 
 
 class TestEvaluateAnswer:

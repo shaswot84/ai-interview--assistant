@@ -120,24 +120,33 @@ class QuestionConfig(BaseModel):
     )
 
     def counts(self) -> dict[QuestionType, int]:
-        """Compute the actual number of questions per type based on distribution percentages."""
-        raw = {qt: max(1, int(self.total_questions * pct)) for qt, pct in self.distribution.items()}
-        total = sum(raw.values())
-        diff = self.total_questions - total
-        if diff > 0:
-            for qt in raw:
-                if diff <= 0:
-                    break
-                raw[qt] += 1
-                diff -= 1
-        elif diff < 0:
-            for qt in list(raw.keys())[:-1]:
-                if diff >= 0:
-                    break
-                reduction = min(raw[qt] - 1, -diff)
-                raw[qt] -= reduction
-                diff += reduction
-        return raw
+        """Allocate exactly total_questions across types proportional to the distribution.
+
+        Uses the largest-remainder (Hamilton) method so the counts sum to
+        total_questions while honouring the requested percentages. Types whose
+        share rounds down to zero are dropped entirely (a type set to 0% yields
+        no questions).
+        """
+        total = self.total_questions
+        pct_sum = sum(self.distribution.values())
+        if total <= 0 or pct_sum <= 0:
+            return {}
+
+        exact = {qt: total * (pct / pct_sum) for qt, pct in self.distribution.items()}
+        floored = {qt: int(v) for qt, v in exact.items()}
+        remaining = total - sum(floored.values())
+
+        # Hand out any leftover questions to the largest fractional remainders.
+        by_remainder = sorted(
+            exact, key=lambda qt: exact[qt] - floored[qt], reverse=True
+        )
+        for qt in by_remainder:
+            if remaining <= 0:
+                break
+            floored[qt] += 1
+            remaining -= 1
+
+        return {qt: c for qt, c in floored.items() if c > 0}
 
 
 DEFAULT_QUESTION_CONFIG = QuestionConfig()

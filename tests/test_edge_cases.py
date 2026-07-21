@@ -167,7 +167,7 @@ class TestRetryExhaustion:
         mock_fallback.return_value = []
         result = generate_questions(A_PROFILE)
         assert result == []
-        mock_fallback.assert_called_once_with(A_PROFILE, needed=5)
+        mock_fallback.assert_called_once_with(A_PROFILE, needed=5, question_config=None)
 
 
 class TestAllSkipped:

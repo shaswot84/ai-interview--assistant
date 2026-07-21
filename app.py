@@ -97,7 +97,15 @@ def _build_question_settings() -> cl.ChatSettings:
 
 
 def _get_question_config() -> QuestionConfig:
-    """Retrieve the current question config from Chainlit's user session."""
+    """Retrieve the current question config from Chainlit's user session.
+
+    Checks the explicit ``question_config`` key first (set by
+    ``on_settings_update``), then falls back to ``chat_settings``
+    (which Chainlit may auto-populate), and finally to the default config.
+    """
+    config = cl.user_session.get("question_config")
+    if config is not None:
+        return config
     settings = cl.user_session.get("chat_settings", {})
     if settings:
         return _settings_to_config(settings)
@@ -126,7 +134,16 @@ async def on_skip(action: cl.Action):
 
 @cl.action_callback("end_early")
 async def on_end_early(action: cl.Action):
-    """End the interview early and jump to the scorecard."""
+    """End the interview early and jump to the scorecard (from question message)."""
+    state = _get_state()
+    state = transition(state, "end_early")
+    _set_state(state)
+    await _handle_completed(state)
+
+
+@cl.action_callback("_feedback_end_early")
+async def on_feedback_end_early(action: cl.Action):
+    """End the interview early from the feedback message."""
     state = _get_state()
     state = transition(state, "end_early")
     _set_state(state)
@@ -143,9 +160,28 @@ async def on_next_question(action: cl.Action):
     await _show_question(state)
 
 
+@cl.action_callback("_feedback_next")
+async def on_feedback_next(action: cl.Action):
+    """Move to the next question from the feedback message."""
+    state = _get_state()
+    state.current_question_index += 1
+    state = transition(state, "next_question")
+    _set_state(state)
+    await _show_question(state)
+
+
 @cl.action_callback("finish")
 async def on_finish(action: cl.Action):
     """Finish the interview (after the last question) and show the scorecard."""
+    state = _get_state()
+    state = transition(state, "finish")
+    _set_state(state)
+    await _handle_completed(state)
+
+
+@cl.action_callback("_feedback_finish")
+async def on_feedback_finish(action: cl.Action):
+    """Finish the interview from the feedback message."""
     state = _get_state()
     state = transition(state, "finish")
     _set_state(state)
@@ -203,8 +239,14 @@ async def on_restart(action: cl.Action):
     await _run_interview_core()
 
 
+@cl.action_callback("generate_questions")
+async def on_generate_questions(action: cl.Action):
+    """Begin question generation after the user has configured the interview."""
+    await _start_question_generation()
+
+
 async def _show_question(state: SessionState):
-    """Display the current question with a countdown timer bar and action buttons."""
+    """Display the current question with interactive elements based on question type."""
     if state.current_question_index >= len(state.questions):
         state = transition(state, "finish")
         _set_state(state)
@@ -215,15 +257,106 @@ async def _show_question(state: SessionState):
     total = len(state.questions)
     idx = state.current_question_index + 1
     timer_limit = get_timer_limit()
+    timer_bar = _timer_bar_html(timer_limit)
+
+    # Build the question content (shared across all types)
+    question_content = f"### Question {idx}/{total}\n\n**{q.text}**\n\n"
+    if q.question_type == QuestionType.CODING and q.starter_code:
+        question_content += f"```{q.language}\n{q.starter_code}\n```\n\n"
+    elif q.question_type == QuestionType.DEBUGGING and q.buggy_code:
+        question_content += f"```\n{q.buggy_code}\n```\n\n"
+    question_content += timer_bar
+
+    # Send the question as a permanent message so it stays visible
+    await cl.Message(content=question_content).send()
+
+    # Send interaction buttons as a separate AskActionMessage
+    if q.question_type == QuestionType.MCQ and q.options:
+        mcq_actions = [
+            cl.Action(name="_mcq", payload={"value": opt}, label=opt)
+            for opt in q.options[:4]
+        ]
+        mcq_actions.append(cl.Action(name="_skip_q", payload={}, label="Skip"))
+        mcq_actions.append(cl.Action(name="_end_q", payload={}, label="End Early"))
+        res = await cl.AskActionMessage(
+            content="Choose your answer:", actions=mcq_actions
+        ).send()
+        if res:
+            name = res.get("name", "")
+            if name == "_skip_q":
+                state = transition(state, "skip")
+                state = transition(state, "evaluation_done")
+                _set_state(state)
+                await _show_feedback(state)
+            elif name == "_end_q":
+                state = transition(state, "end_early")
+                _set_state(state)
+                await _handle_completed(state)
+            else:
+                answer = res.get("payload", {}).get("value", "")
+                await _handle_answer(state, answer)
+        return
+
+    if q.question_type == QuestionType.YES_NO:
+        yn_actions = [
+            cl.Action(name="_yn_yes", payload={"value": "Yes"}, label="Yes"),
+            cl.Action(name="_yn_no", payload={"value": "No"}, label="No"),
+            cl.Action(name="_skip_q", payload={}, label="Skip"),
+            cl.Action(name="_end_q", payload={}, label="End Early"),
+        ]
+        res = await cl.AskActionMessage(
+            content="Choose your answer:", actions=yn_actions
+        ).send()
+        if res:
+            name = res.get("name", "")
+            if name == "_skip_q":
+                state = transition(state, "skip")
+                state = transition(state, "evaluation_done")
+                _set_state(state)
+                await _show_feedback(state)
+            elif name == "_end_q":
+                state = transition(state, "end_early")
+                _set_state(state)
+                await _handle_completed(state)
+            else:
+                answer = res.get("payload", {}).get("value", "")
+                await _handle_answer(state, answer)
+        return
+
+    # Open-ended, coding, debugging, behavioral, system design
     actions = [
+        cl.Action(name="answer", payload={}, label="Answer"),
         cl.Action(name="skip", payload={}, label="Skip"),
         cl.Action(name="end_early", payload={}, label="End Early"),
     ]
-    timer_bar = _timer_bar_html(timer_limit)
-    await cl.Message(
-        content=f"### Question {idx}/{total}\n\n**{q.text}**\n\n{timer_bar}",
-        actions=actions,
+    res = await cl.AskActionMessage(
+        content="How would you like to proceed?", actions=actions
     ).send()
+    if res is None:
+        return
+    name = res.get("name", "")
+    if name == "skip":
+        state = transition(state, "skip")
+        state = transition(state, "evaluation_done")
+        _set_state(state)
+        await _show_feedback(state)
+    elif name == "end_early":
+        state = transition(state, "end_early")
+        _set_state(state)
+        await _handle_completed(state)
+    elif name == "answer":
+        answer_res = await cl.AskUserMessage(
+            content="Please type your answer below:",
+            timeout=get_timer_limit(),
+        ).send()
+        if answer_res:
+            answer_text = answer_res["output"].strip()
+            await _handle_answer(state, answer_text)
+        else:
+            state = transition(state, "skip")
+            state = transition(state, "evaluation_done")
+            _set_state(state)
+            await _show_feedback(state)
 
 
 async def _handle_answer(state: SessionState, answer: str):
@@ -257,15 +390,10 @@ async def _handle_answer(state: SessionState, answer: str):
 
     state = transition(state, "evaluation_done")
     _set_state(state)
-    if eval_failed:
-        await cl.Message(
-            content="Evaluation encountered an error. You can try again below.",
-            actions=[cl.Action(name="retry_evaluation", payload={}, label="Retry Evaluation")],
-        ).send()
-    await _show_feedback(state)
+    await _show_feedback(state, eval_failed=eval_failed)
 
 
-async def _show_feedback(state: SessionState):
+async def _show_feedback(state: SessionState, eval_failed: bool = False):
     """Render the feedback message with scores, grammar correction, and navigation actions."""
     q = state.questions[state.current_question_index]
     eval_ = state.evaluations.get(q.id)
@@ -275,11 +403,27 @@ async def _show_feedback(state: SessionState):
         content = f"**Question skipped.**\n\n_{q.text}_"
         actions = []
         if is_last:
-            actions.append(cl.Action(name="finish", payload={}, label="Finish"))
+            actions.append(cl.Action(name="_feedback_finish", payload={}, label="Finish"))
         else:
-            actions.append(cl.Action(name="next_question", payload={}, label="Next Question"))
-        actions.append(cl.Action(name="end_early", payload={}, label="End Early"))
-        await cl.Message(content=content, actions=actions).send()
+            actions.append(cl.Action(name="_feedback_next", payload={}, label="Next Question"))
+        actions.append(cl.Action(name="_feedback_end_early", payload={}, label="End Early"))
+        res = await cl.AskActionMessage(content=content, actions=actions).send()
+        if res is None:
+            return
+        name = res.get("name", "")
+        if name == "_feedback_finish":
+            state = transition(state, "finish")
+            _set_state(state)
+            await _handle_completed(state)
+        elif name == "_feedback_next":
+            state.current_question_index += 1
+            state = transition(state, "next_question")
+            _set_state(state)
+            await _show_question(state)
+        elif name == "_feedback_end_early":
+            state = transition(state, "end_early")
+            _set_state(state)
+            await _handle_completed(state)
         return
 
     from scoring import calculate_question_score
@@ -296,6 +440,8 @@ async def _show_feedback(state: SessionState):
         f"| Grammar | {eval_.grammar}/10 |\n"
         f"| Impact | {eval_.impact}/10 |\n\n"
     )
+    if eval_failed:
+        content += "⚠️ **Evaluation encountered an error.** You can retry below.\n\n"
     if eval_.actionable_feedback:
         content += f"**Actionable Feedback:** {eval_.actionable_feedback}\n\n"
     if eval_.grammar_correction:
@@ -304,13 +450,56 @@ async def _show_feedback(state: SessionState):
         content += f"**Simplified Version:** {eval_.simplified_version}"
 
     actions = []
+    if eval_failed:
+        actions.append(cl.Action(name="retry", payload={}, label="Retry Evaluation"))
     if is_last:
-        actions.append(cl.Action(name="finish", payload={}, label="Finish"))
+        actions.append(cl.Action(name="_feedback_finish", payload={}, label="Finish"))
     else:
-        actions.append(cl.Action(name="next_question", payload={}, label="Next Question"))
-    actions.append(cl.Action(name="end_early", payload={}, label="End Early"))
+        actions.append(cl.Action(name="_feedback_next", payload={}, label="Next Question"))
+    actions.append(cl.Action(name="_feedback_end_early", payload={}, label="End Early"))
 
-    await cl.Message(content=content, actions=actions).send()
+    res = await cl.AskActionMessage(content=content, actions=actions).send()
+    if res is None:
+        return
+    name = res.get("name", "")
+    if name == "retry":
+        await _handle_retry(state)
+    elif name == "_feedback_finish":
+        state = transition(state, "finish")
+        _set_state(state)
+        await _handle_completed(state)
+    elif name == "_feedback_next":
+        state.current_question_index += 1
+        state = transition(state, "next_question")
+        _set_state(state)
+        await _show_question(state)
+    elif name == "_feedback_end_early":
+        state = transition(state, "end_early")
+        _set_state(state)
+        await _handle_completed(state)
+
+
+async def _handle_retry(state: SessionState):
+    """Re-evaluate the current answer and re-display feedback."""
+    q = state.questions[state.current_question_index]
+    answer = state.transcript.get(q.id, "")
+    msg = cl.Message(content="Re-evaluating your answer...")
+    await msg.send()
+    try:
+        eval_ = evaluate_answer(q, answer, state.profile)
+        state.evaluations[q.id] = eval_
+        _set_state(state)
+        await _show_feedback(state)
+    except Exception:
+        from schemas import Evaluation
+        eval_ = Evaluation(
+            clarity=5, completeness=5, relevance=5, grammar=5, impact=5,
+            grammar_correction="", simplified_version="",
+            actionable_feedback="Evaluation unavailable due to an error.",
+        )
+        state.evaluations[q.id] = eval_
+        _set_state(state)
+        await _show_feedback(state, eval_failed=True)
 
 
 async def _handle_completed(state: SessionState):
@@ -464,20 +653,29 @@ async def _run_interview_core():
     _set_state(state)
 
     # Now that seniority (and the rest of the profile) is known, let the user
-    # configure the question mix. The settings panel updates chat_settings when
-    # submitted; the AskActionMessage gates generation until the user is ready.
+    # configure the question mix. We use a regular action button here (not an
+    # AskActionMessage) so the message composer stays active — otherwise the
+    # settings gear/slider icon would be disabled and the user couldn't open
+    # the configuration panel. Generation continues in `on_generate_questions`.
     await _build_question_settings().send()
-    await cl.AskActionMessage(
+    await cl.Message(
         content=(
             "⚙️ **Configure your interview.** Open the settings panel (the gear/slider "
             "icon in the message bar) to set the **total number of questions** and the "
             "**percentage mix** of each question type. When you're ready, click "
             "**Generate Questions**."
         ),
-        actions=[cl.Action(name="config_done", payload={}, label="Generate Questions")],
+        actions=[cl.Action(name="generate_questions", payload={}, label="Generate Questions")],
     ).send()
 
+
+async def _start_question_generation() -> None:
+    """Generate questions from the configured settings and begin the interview."""
     state = _get_state()
+    if state.profile is None:
+        await cl.Message(content="Profile missing. Please restart the interview.").send()
+        return
+
     state = transition(state, "submit_profile")
     _set_state(state)
 
@@ -485,7 +683,7 @@ async def _run_interview_core():
     await msg.send()
     try:
         question_config = _get_question_config()
-        questions = await asyncio.to_thread(generate_questions, profile, question_config)
+        questions = await asyncio.to_thread(generate_questions, state.profile, question_config)
         state.questions = questions
         state = transition(state, "questions_ready")
         _set_state(state)

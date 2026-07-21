@@ -124,7 +124,7 @@ def generate_questions(profile: UserProfile, question_config: QuestionConfig | N
         return result.questions
     except Exception:
         needed = question_config.total_questions if question_config else 5
-        return fallback_questions(profile, needed=needed)
+        return fallback_questions(profile, needed=needed, question_config=question_config)
 
 
 def evaluate_answer(
