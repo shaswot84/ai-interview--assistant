@@ -24,6 +24,17 @@ class QuestionCategory(str, Enum):
     BEHAVIORAL = "behavioral"
 
 
+class QuestionType(str, Enum):
+    """Specific question format type."""
+    OPEN_ENDED = "open_ended"
+    BEHAVIORAL = "behavioral"
+    MCQ = "mcq"
+    YES_NO = "yes_no"
+    CODING = "coding"
+    DEBUGGING = "debugging"
+    SYSTEM_DESIGN = "system_design"
+
+
 class InterviewState(str, Enum):
     """All possible states in the interview state machine."""
     IDLE = "IDLE"
@@ -58,8 +69,17 @@ class Question(BaseModel):
     id: str
     text: str
     category: QuestionCategory
+    question_type: QuestionType = QuestionType.OPEN_ENDED
     difficulty: str = ""
     expected_keywords: list[str] = []
+    options: list[str] = []
+    correct_answer: str | bool | None = None
+    starter_code: str = ""
+    language: str = ""
+    evaluation_type: str = ""
+    buggy_code: str = ""
+    expected_fix: str = ""
+    evaluation_focus: list[str] = []
 
 
 class Evaluation(BaseModel):
@@ -87,6 +107,40 @@ class Scorecard(BaseModel):
     model_answer: str
     overall_assessment: str
     grade: LetterGrade
+
+
+class QuestionConfig(BaseModel):
+    """Configuration for question generation — type distribution, count, and seniority targeting."""
+    total_questions: int = 5
+    distribution: dict[QuestionType, float] = Field(
+        default_factory=lambda: {
+            QuestionType.OPEN_ENDED: 0.60,
+            QuestionType.BEHAVIORAL: 0.40,
+        }
+    )
+
+    def counts(self) -> dict[QuestionType, int]:
+        """Compute the actual number of questions per type based on distribution percentages."""
+        raw = {qt: max(1, int(self.total_questions * pct)) for qt, pct in self.distribution.items()}
+        total = sum(raw.values())
+        diff = self.total_questions - total
+        if diff > 0:
+            for qt in raw:
+                if diff <= 0:
+                    break
+                raw[qt] += 1
+                diff -= 1
+        elif diff < 0:
+            for qt in list(raw.keys())[:-1]:
+                if diff >= 0:
+                    break
+                reduction = min(raw[qt] - 1, -diff)
+                raw[qt] -= reduction
+                diff += reduction
+        return raw
+
+
+DEFAULT_QUESTION_CONFIG = QuestionConfig()
 
 
 class SessionState(BaseModel):

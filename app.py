@@ -6,8 +6,8 @@ from datetime import datetime, timezone
 import chainlit as cl
 
 from export import generate_markdown_transcript, generate_pdf
-from llm_client import evaluate_answer, generate_questions, synthesize_scorecard
-from schemas import InterviewState, Seniority, SessionState, UserProfile
+from llm_client import evaluate_answer, generate_questions, synthesize_scorecard, validate_role
+from schemas import InterviewState, QuestionConfig, QuestionType, Seniority, SessionState, UserProfile
 from scoring import get_letter_grade, prepare_radar_chart_data, render_radar_chart
 from session_state import transition
 from timer import get_timer_limit, is_timed_out
@@ -19,6 +19,8 @@ ONBOARDING_PROMPTS = [
     "What is your **seniority level**? (Junior / Mid / Senior / Lead)",
     "What **industry** do you work in? (e.g. FinTech)",
 ]
+
+
 
 
 def _timer_bar_html(seconds: int) -> str:
@@ -37,6 +39,69 @@ def _timer_bar_html(seconds: int) -> str:
 @keyframes __tShrink{{to{{width:0%}}}}
 @keyframes __tBlink{{0%,100%{{background:#EF4444;opacity:1}}50%{{opacity:0.15}}}}
 </style>"""
+
+
+def _settings_to_config(settings: dict) -> QuestionConfig:
+    """Convert Chainlit settings dict to a QuestionConfig."""
+    total = int(settings.get("total_questions", 5))
+    raw = {
+        QuestionType.OPEN_ENDED: float(settings.get("pct_open_ended", 30)),
+        QuestionType.BEHAVIORAL: float(settings.get("pct_behavioral", 20)),
+        QuestionType.MCQ: float(settings.get("pct_mcq", 15)),
+        QuestionType.CODING: float(settings.get("pct_coding", 10)),
+        QuestionType.DEBUGGING: float(settings.get("pct_debugging", 10)),
+        QuestionType.SYSTEM_DESIGN: float(settings.get("pct_system_design", 15)),
+    }
+    total_pct = sum(raw.values())
+    if total_pct > 0:
+        normalized = {qt: v / total_pct for qt, v in raw.items()}
+    else:
+        normalized = {qt: 1.0 / len(raw) for qt in raw}
+    return QuestionConfig(total_questions=total, distribution=normalized)
+
+
+def _build_question_settings() -> cl.ChatSettings:
+    """Build the question-configuration panel (total count + per-type percentage mix)."""
+    return cl.ChatSettings(
+        [
+            cl.input_widget.NumberInput(
+                id="total_questions", label="Total Questions", initial=5, min=1, max=20,
+                description="Number of interview questions to generate.",
+            ),
+            cl.input_widget.Slider(
+                id="pct_open_ended", label="Technical Open-ended %", initial=30, min=0, max=100,
+                description="Open-ended technical questions.",
+            ),
+            cl.input_widget.Slider(
+                id="pct_behavioral", label="Behavioral (STAR) %", initial=20, min=0, max=100,
+                description="Behavioral questions expecting STAR-format answers.",
+            ),
+            cl.input_widget.Slider(
+                id="pct_mcq", label="Multiple Choice %", initial=15, min=0, max=100,
+                description="Multiple choice questions.",
+            ),
+            cl.input_widget.Slider(
+                id="pct_coding", label="Coding %", initial=10, min=0, max=100,
+                description="Coding questions.",
+            ),
+            cl.input_widget.Slider(
+                id="pct_debugging", label="Debugging %", initial=10, min=0, max=100,
+                description="Code debugging questions.",
+            ),
+            cl.input_widget.Slider(
+                id="pct_system_design", label="System Design %", initial=15, min=0, max=100,
+                description="System design / scenario-based questions.",
+            ),
+        ]
+    )
+
+
+def _get_question_config() -> QuestionConfig:
+    """Retrieve the current question config from Chainlit's user session."""
+    settings = cl.user_session.get("chat_settings", {})
+    if settings:
+        return _settings_to_config(settings)
+    return QuestionConfig()
 
 
 def _get_state() -> SessionState:
@@ -314,6 +379,13 @@ async def _show_scorecard(state: SessionState):
     await cl.Message(content="What would you like to do next?", actions=actions).send()
 
 
+@cl.on_settings_update
+async def on_settings_update(settings: dict):
+    """Capture question configuration changes from the settings panel."""
+    config = _settings_to_config(settings)
+    cl.user_session.set("question_config", config)
+
+
 @cl.on_chat_start
 async def on_chat_start():
     """Entry point — initialise state, display welcome, and launch the interview flow."""
@@ -345,6 +417,25 @@ async def _run_interview_core():
                 ],
             ).send()
             data[field] = res["payload"]["value"] if res else ""
+        elif field == "role":
+            while True:
+                res = await cl.AskUserMessage(content=ONBOARDING_PROMPTS[idx]).send()
+                if not res:
+                    data[field] = ""
+                    break
+                val = res["output"].strip()
+                if not val:
+                    await cl.Message(content="Please enter a value.").send()
+                    continue
+                is_it = await asyncio.to_thread(validate_role, val)
+                if not is_it:
+                    await cl.Message(
+                        content="That role doesn't appear to be IT-related. "
+                        "Please enter a valid IT role (e.g. Backend Engineer, Data Scientist, DevOps Engineer)."
+                    ).send()
+                    continue
+                data[field] = val
+                break
         else:
             res = await cl.AskUserMessage(content=ONBOARDING_PROMPTS[idx]).send()
             if res:
@@ -370,13 +461,31 @@ async def _run_interview_core():
     )
     state = _get_state()
     state.profile = profile
+    _set_state(state)
+
+    # Now that seniority (and the rest of the profile) is known, let the user
+    # configure the question mix. The settings panel updates chat_settings when
+    # submitted; the AskActionMessage gates generation until the user is ready.
+    await _build_question_settings().send()
+    await cl.AskActionMessage(
+        content=(
+            "⚙️ **Configure your interview.** Open the settings panel (the gear/slider "
+            "icon in the message bar) to set the **total number of questions** and the "
+            "**percentage mix** of each question type. When you're ready, click "
+            "**Generate Questions**."
+        ),
+        actions=[cl.Action(name="config_done", payload={}, label="Generate Questions")],
+    ).send()
+
+    state = _get_state()
     state = transition(state, "submit_profile")
     _set_state(state)
 
     msg = cl.Message(content="Generating interview questions...")
     await msg.send()
     try:
-        questions = await asyncio.to_thread(generate_questions, profile)
+        question_config = _get_question_config()
+        questions = await asyncio.to_thread(generate_questions, profile, question_config)
         state.questions = questions
         state = transition(state, "questions_ready")
         _set_state(state)

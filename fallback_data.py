@@ -3,7 +3,7 @@
 Provides 10 questions per seniority level (5 technical + 5 behavioural).
 """
 
-from schemas import Question, QuestionCategory, Seniority
+from schemas import Question, QuestionCategory, QuestionConfig, QuestionType, Seniority
 
 # Pool of static questions indexed by seniority level
 FALLBACK_QUESTIONS: dict[str, list[Question]] = {
@@ -58,17 +58,38 @@ FALLBACK_QUESTIONS: dict[str, list[Question]] = {
 }
 
 
-def fallback_questions(profile, needed: int = 5) -> list[Question]:
+def fallback_questions(profile, needed: int = 5, question_config: QuestionConfig | None = None) -> list[Question]:
     """Return up to `needed` static questions from the fallback bank for the given seniority.
     
-    Prioritises technical questions (3) then behavioural (2).
+    When a config is supplied, distributes questions according to the requested types.
+    Falls back to technical/behavioural ratio for unknown types.
     """
     key = profile.seniority.value if isinstance(profile.seniority, Seniority) else profile.seniority
     pool = FALLBACK_QUESTIONS.get(key, FALLBACK_QUESTIONS["Mid"])
     if len(pool) <= needed:
         return list(pool)
+
     technical = [q for q in pool if q.category == QuestionCategory.TECHNICAL]
     behavioural = [q for q in pool if q.category == QuestionCategory.BEHAVIOURAL]
-    n_tech = min(3, len(technical))
-    n_behav = min(needed - n_tech, len(behavioural))
-    return technical[:n_tech] + behavioural[:n_behav]
+
+    if question_config is None:
+        n_tech = min(3, len(technical))
+        n_behav = min(needed - n_tech, len(behavioural))
+        return technical[:n_tech] + behavioural[:n_behav]
+
+    counts = question_config.counts()
+    result = []
+    tech_idx = 0
+    behav_idx = 0
+    for qt, count in counts.items():
+        for _ in range(count):
+            if qt in (QuestionType.OPEN_ENDED, QuestionType.CODING, QuestionType.SYSTEM_DESIGN, QuestionType.MCQ, QuestionType.YES_NO, QuestionType.DEBUGGING):
+                q = technical[tech_idx % len(technical)]
+                tech_idx += 1
+                q.question_type = qt
+            elif qt == QuestionType.BEHAVIORAL:
+                q = behavioural[behav_idx % len(behavioural)]
+                behav_idx += 1
+                q.question_type = qt
+            result.append(q)
+    return result

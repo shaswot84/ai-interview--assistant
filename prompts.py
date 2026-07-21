@@ -46,9 +46,9 @@ You are interviewing a candidate for a {seniority}-level {role} position.
 
 {seniority_persona}
 
-Generate exactly 5 interview questions:
-- 3 technical questions appropriate for {seniority} level in {industry}
-- 2 behavioral questions expecting STAR-format answers
+{distribution_instructions}
+
+{question_type_instructions}
 
 Return ONLY a valid JSON object with this structure:
 {{
@@ -57,11 +57,61 @@ Return ONLY a valid JSON object with this structure:
       "id": "q1",
       "text": "The question text",
       "category": "technical|behavioural",
+      "question_type": "{question_type_example}",
       "difficulty": "{seniority}",
       "expected_keywords": ["keyword1", "keyword2"]
     }}
   ]
 }}"""
+
+QUESTION_TYPE_DESCRIPTIONS = {
+    "open_ended": {
+        "description": "Open-ended technical question requiring a detailed explanation.",
+        "fields": "Standard fields only (id, text, category, question_type, difficulty, expected_keywords).",
+    },
+    "behavioral": {
+        "description": "Behavioral question expecting a STAR-format answer (Situation, Task, Action, Result).",
+        "fields": "Standard fields only.",
+    },
+    "mcq": {
+        "description": "Multiple choice question with exactly 4 options and one correct answer.",
+        "fields": 'Include "options": ["A", "B", "C", "D"] and "correct_answer": "A".',
+    },
+    "yes_no": {
+        "description": "Yes/No question requiring a true/false answer.",
+        "fields": 'Include "correct_answer": true or false.',
+    },
+    "coding": {
+        "description": "Coding question requiring the candidate to write code.",
+        "fields": 'Include "starter_code": "def solve():\\n    pass", "language": "python", "evaluation_type": "unit_tests".',
+    },
+    "debugging": {
+        "description": "Code debugging question where the candidate must find and fix a bug.",
+        "fields": 'Include "buggy_code": "def add(a, b):\\n    return a - b", "expected_fix": "Change - to +".',
+    },
+    "system_design": {
+        "description": "System design or scenario-based question evaluating architecture decisions.",
+        "fields": 'Include "evaluation_focus": ["scalability", "tradeoffs", "reliability"].',
+    },
+}
+
+QUESTION_TYPE_DISTRIBUTION_TEMPLATE = """
+Generate exactly {total_questions} interview questions with the following type distribution:
+
+{distribution_lines}
+
+For each question, use the appropriate JSON structure based on its type:
+
+- open_ended: Standard fields (id, text, category, question_type, difficulty, expected_keywords).
+- behavioral: Standard fields. Expect STAR-format answers.
+- mcq: Include "options" (array of 4 strings) and "correct_answer" (string).
+- yes_no: Include "correct_answer" (boolean).
+- coding: Include "starter_code" (string), "language" (string), "evaluation_type" (string).
+- debugging: Include "buggy_code" (string), "expected_fix" (string).
+- system_design: Include "evaluation_focus" (array of strings like "scalability", "tradeoffs", "reliability").
+
+All questions must be appropriate for {seniority} level in {industry}.
+"""
 
 # EVALUATION_PERSONAS = {
 #     "junior": "For a junior, credit structured thinking and curiosity. Don't penalize lack of production experience. A good answer shows learning velocity.",
@@ -482,13 +532,52 @@ Return a JSON object with: strengths (array of strings), improvements (array of 
 model_answer (string), overall_assessment (string), grade (string, one of A/B/C/D/F)."""
 
 
-def get_question_prompt(profile) -> str:
-    """Build the question-generation system prompt for the given profile."""
+def _build_distribution_instructions(config, seniority: str, industry: str) -> tuple[str, str]:
+    """Build distribution and question-type instruction strings from a QuestionConfig."""
+    counts = config.counts()
+    lines = []
+    type_examples = []
+    for qt, count in counts.items():
+        label = qt.value.replace("_", " ").title()
+        lines.append(f"- {count} {label} question(s)")
+        type_examples.append(qt.value)
+
+    distribution_lines = "\n".join(lines)
+    type_example = type_examples[0] if type_examples else "open_ended"
+
+    dist_instructions = QUESTION_TYPE_DISTRIBUTION_TEMPLATE.format(
+        total_questions=config.total_questions,
+        distribution_lines=distribution_lines,
+        seniority=seniority,
+        industry=industry,
+    )
+
+    return dist_instructions.strip(), type_example
+
+
+def get_question_prompt(profile, config=None) -> str:
+    """Build the question-generation system prompt for the given profile and optional config."""
+    seniority_val = profile.seniority.value
+    industry_val = profile.industry
+
+    if config is None:
+        dist_instructions = (
+            f"Generate exactly 5 interview questions:\n"
+            f"- 3 technical questions appropriate for {seniority_val} level in {industry_val}\n"
+            f"- 2 behavioral questions expecting STAR-format answers"
+        )
+        type_example = "open_ended"
+    else:
+        dist_instructions, type_example = _build_distribution_instructions(config, seniority_val, industry_val)
+
     return QUESTION_GEN_PROMPT.format(
-        seniority=profile.seniority.value,
+        seniority=seniority_val,
         seniority_persona=SENIORITY_PERSONAS[profile.seniority.name.lower()],
-        industry=profile.industry,
+        industry=industry_val,
         role=profile.role,
+        distribution_instructions=dist_instructions,
+        question_type_instructions="",
+        question_type_example=type_example,
     )
 
 

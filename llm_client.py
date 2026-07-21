@@ -10,7 +10,7 @@ from config import config
 from fallback_data import fallback_questions
 from prompts import SCORECARD_PROMPT, get_evaluation_prompt, get_question_prompt
 from providers import get_openai_client
-from schemas import Evaluation, Question, Scorecard, SessionState, UserProfile
+from schemas import Evaluation, Question, QuestionConfig, Scorecard, SessionState, UserProfile
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -47,6 +47,11 @@ class _ScorecardResponse(BaseModel):
     grade: str
 
 
+class _RoleValidationResponse(BaseModel):
+    """Response model for role validation."""
+    is_it_role: bool
+
+
 def _call_with_retry(
     messages: list[dict],
     response_model: type[T],
@@ -75,14 +80,38 @@ def _call_with_retry(
     raise RuntimeError(f"LLM call failed after {max_retries} retries") from last_error
 
 
-def generate_questions(profile: UserProfile) -> list[Question]:
-    """Generate 5 interview questions (3 technical, 2 behavioural) for the given profile.
+def validate_role(role: str) -> bool:
+    """Use the LLM to classify whether a given role is IT-related."""
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                "You are a classifier that determines whether a job role is IT-related "
+                "(software engineering, data science, DevOps, IT support, product management in tech, etc.). "
+                "Return a JSON object with a single boolean field `is_it_role`."
+            ),
+        },
+        {
+            "role": "user",
+            "content": f"Is the following job role IT-related? Role: {role}",
+        },
+    ]
+    try:
+        result = _call_with_retry(messages, _RoleValidationResponse, temperature=0)
+        return result.is_it_role
+    except Exception:
+        return True
+
+
+def generate_questions(profile: UserProfile, question_config: QuestionConfig | None = None) -> list[Question]:
+    """Generate interview questions for the given profile.
     
+    When no config is supplied, defaults to 5 questions (3 technical, 2 behavioural).
     Falls back to static questions from fallback_data if the LLM call fails.
     """
     try:
         messages = [
-            {"role": "system", "content": get_question_prompt(profile)},
+            {"role": "system", "content": get_question_prompt(profile, question_config)},
             {
                 "role": "user",
                 "content": (
@@ -94,7 +123,8 @@ def generate_questions(profile: UserProfile) -> list[Question]:
         result = _call_with_retry(messages, QuestionsResponse, temperature=config.generation_temperature)
         return result.questions
     except Exception:
-        return fallback_questions(profile, needed=5)
+        needed = question_config.total_questions if question_config else 5
+        return fallback_questions(profile, needed=needed)
 
 
 def evaluate_answer(
