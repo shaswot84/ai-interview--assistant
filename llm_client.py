@@ -14,6 +14,7 @@ from prompts import (
     INTERVIEWER_STYLE_PERSONAS,
     SCORECARD_PROMPT,
     get_evaluation_prompt,
+    get_feedback_code_prompt,
     get_feedback_prompt,
     get_question_prompt,
     get_strict_evaluation_prompt,
@@ -75,8 +76,10 @@ class _FeedbackResponse(BaseModel):
     """Internal Pydantic model for Stage 2 feedback generation."""
     strengths: list[str]
     weaknesses: list[str]
-    grammar_correction: str
-    simplified_version: str
+    grammar_correction: str = ""
+    simplified_version: str = ""
+    code_fix: str = ""
+    code_review: str = ""
     actionable_feedback: str
 
 
@@ -264,9 +267,11 @@ def _generate_feedback(
     question: Question,
     scores_json: str,
 ) -> _FeedbackResponse | None:
-    """Stage 2 — Feedback generation. Returns None if the LLM call fails."""
+    """Stage 2 — Feedback generation. Dispatches code-specific prompt for coding/debugging."""
+    is_code = question.question_type in (QuestionType.CODING, QuestionType.DEBUGGING)
+    prompt = get_feedback_code_prompt(scores_json) if is_code else get_feedback_prompt(scores_json)
     messages = [
-        {"role": "system", "content": get_feedback_prompt(scores_json)},
+        {"role": "system", "content": prompt},
         {
             "role": "user",
             "content": f"Generate feedback for this answer to: {question.text}",
@@ -317,6 +322,8 @@ def _evaluate_llm(
         weaknesses=feedback.weaknesses if feedback else [],
         grammar_correction=feedback.grammar_correction if feedback else "",
         simplified_version=feedback.simplified_version if feedback else "",
+        code_fix=feedback.code_fix if feedback else "",
+        code_review=feedback.code_review if feedback else "",
         actionable_feedback=feedback.actionable_feedback if feedback else "Coaching unavailable.",
     )
 

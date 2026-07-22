@@ -280,3 +280,15 @@
 - **Test count:** 108 total (all green; 3 performance benchmarks)
 - Updated all docs — `CLAUDE.md`, `architecture.md`, `PROGRESS.md`, `PROMPTS.md`, `TESTING.md`, `logs.md`
 - **Status:** Phase 5 scorecard redesign complete
+
+## Phase 5 — MCQ Visibility, Type-Aware Feedback & UI Polish (2026-07-23)
+- **MCQ answer echo:** After selecting an MCQ or Yes/No option, the chosen answer is echoed as a permanent `cl.Message` so it stays visible after the `AskActionMessage` is consumed.
+- **Empty MCQ guard:** If an MCQ question has no options or fewer than 2, it falls back to open-ended with a warning log (no crash, no blank buttons).
+- **Type/category badges:** Added `_question_badge_html()` helper — every question now shows colored badges: type (💻 CODING, 🧠 BEHAVIORAL, ✅ MCQ, 🐛 DEBUGGING, 🏗️ SYSTEM DESIGN) and category (Concurrency, Databases, etc.).
+- **Enhanced code rendering:** Coding blocks have a "📄 Starter Code (lang)" label above; debugging blocks have "🐛 Buggy Code" label.
+- **Code-paste hint:** Clicking "Answer" on coding/debugging questions shows backtick guidance prompt; submitted code has surrounding ``` fences stripped.
+- **Type-aware feedback:** Added `_FEEDBACK_CODE_PROMPT` for coding/debugging questions — generates `code_fix` (corrected code with comments) and `code_review` instead of `grammar_correction`/`simplified_version`. `_generate_feedback()` dispatches on `QuestionType.CODING`/`DEBUGGING`. `_show_feedback()` conditionally renders code review/fix vs grammar/simplified.
+- **Schema:** Added optional `code_fix` and `code_review` fields to `Evaluation` (backward-compatible).
+- **Test count:** 108 total (all green)
+- Updated `docs/logs.md`
+- **Status:** Phase 5 UI polish complete

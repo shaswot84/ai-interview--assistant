@@ -275,6 +275,40 @@ async def on_generate_questions(action: cl.Action):
     await _start_question_generation()
 
 
+def _question_badge_html(q) -> str:
+    """Render HTML badges showing the question type and category."""
+    type_colors = {
+        "open_ended": "#3B82F6",
+        "behavioral": "#2ec8dd",
+        "mcq": "#8B5CF6",
+        "yes_no": "#10B981",
+        "coding": "#F59E0B",
+        "debugging": "#EF4444",
+        "system_design": "#EC4899",
+    }
+    type_icons = {
+        "open_ended": "💬",
+        "behavioral": "🧠",
+        "mcq": "✅",
+        "yes_no": "⚡",
+        "coding": "💻",
+        "debugging": "🐛",
+        "system_design": "🏗️",
+    }
+    color = type_colors.get(q.question_type.value, "#6B7280")
+    icon = type_icons.get(q.question_type.value, "📝")
+    type_label = q.question_type.value.replace("_", " ").upper()
+    cat_label = q.category.value.replace("_", " ").title()
+    return (
+        f'<span style="display:inline-flex;align-items:center;gap:6px;font-size:0.85em;margin-bottom:8px;">'
+        f'<span style="background:{color};color:#fff;padding:2px 10px;border-radius:12px;font-weight:600;">'
+        f'{icon} {type_label}</span>'
+        f'<span style="background:#1F2937;color:#D1D5DB;padding:2px 10px;border-radius:12px;font-weight:500;">'
+        f'{cat_label}</span>'
+        f'</span>'
+    )
+
+
 async def _show_question(state: SessionState):
     """Display the current question with interactive elements based on question type."""
     if state.current_question_index >= len(state.questions):
@@ -288,12 +322,26 @@ async def _show_question(state: SessionState):
     idx = state.current_question_index + 1
     is_last = state.current_question_index >= total - 1
 
-    # Build the question content (shared across all types)
-    question_content = f"### Question {idx}/{total}\n\n**{q.text}**\n\n"
+    # Build the question content with type/category badges
+    question_content = (
+        f"{_question_badge_html(q)}"
+        f"### Question {idx}/{total}\n\n**{q.text}**\n\n"
+    )
     if q.question_type == QuestionType.CODING and q.starter_code:
-        question_content += f"```{q.language}\n{q.starter_code}\n```\n\n"
+        lang = q.language or "text"
+        question_content += (
+            f'<div style="background:#1e1e2e;color:#cdd6f4;border-radius:8px;padding:2px 12px;margin:8px 0;">'
+            f'<span style="font-size:0.8em;color:#89b4fa;">📄 Starter Code ({lang})</span>'
+            f'</div>\n'
+            f'```{lang}\n{q.starter_code}\n```\n\n'
+        )
     elif q.question_type == QuestionType.DEBUGGING and q.buggy_code:
-        question_content += f"```\n{q.buggy_code}\n```\n\n"
+        question_content += (
+            f'<div style="background:#1e1e2e;color:#cdd6f4;border-radius:8px;padding:2px 12px;margin:8px 0;">'
+            f'<span style="font-size:0.8em;color:#f38ba8;">🐛 Buggy Code</span>'
+            f'</div>\n'
+            f'```\n{q.buggy_code}\n```\n\n'
+        )
 
     # Send the question as a permanent message so it stays visible
     await cl.Message(content=question_content).send()
@@ -304,37 +352,47 @@ async def _show_question(state: SessionState):
     await timer_msg.send()
     cl.user_session.set("timer_message", timer_msg)
 
-    # Send interaction buttons as a separate AskActionMessage
-    if q.question_type == QuestionType.MCQ and q.options:
-        mcq_actions = [
-            cl.Action(name="_mcq", payload={"value": opt}, label=opt)
-            for opt in q.options[:4]
-        ]
-        mcq_actions.append(cl.Action(name="_skip_q", payload={}, label="Skip"))
-        if not is_last:
-            mcq_actions.append(cl.Action(name="_end_q", payload={}, label="End Early"))
-        res = await cl.AskActionMessage(
-            content="Choose your answer:", actions=mcq_actions
-        ).send()
-        if res:
-            name = res.get("name", "")
-            if name == "_skip_q":
-                await _freeze_timer(state)
-                state = transition(state, "skip")
-                state = transition(state, "evaluation_done")
-                _set_state(state)
-                await _show_feedback(state)
-            elif name == "_end_q":
-                await _freeze_timer(state)
-                state = transition(state, "end_early")
-                _set_state(state)
-                await _handle_completed(state)
-            else:
-                await _freeze_timer(state)
-                answer = res.get("payload", {}).get("value", "")
-                await _handle_answer(state, answer)
-        return
+    # ── MCQ branch (with empty-options guard) ──
+    if q.question_type == QuestionType.MCQ:
+        if not q.options or len(q.options) < 2:
+            import logging
+            logging.getLogger(__name__).warning(
+                "MCQ question %s has empty or insufficient options, falling back to open-ended.", q.id
+            )
+            # Fall through to open-ended handler below
+        else:
+            mcq_actions = [
+                cl.Action(name="_mcq", payload={"value": opt}, label=opt)
+                for opt in q.options[:4]
+            ]
+            mcq_actions.append(cl.Action(name="_skip_q", payload={}, label="Skip"))
+            if not is_last:
+                mcq_actions.append(cl.Action(name="_end_q", payload={}, label="End Early"))
+            res = await cl.AskActionMessage(
+                content="Choose your answer:", actions=mcq_actions
+            ).send()
+            if res:
+                name = res.get("name", "")
+                if name == "_skip_q":
+                    await _freeze_timer(state)
+                    state = transition(state, "skip")
+                    state = transition(state, "evaluation_done")
+                    _set_state(state)
+                    await _show_feedback(state)
+                elif name == "_end_q":
+                    await _freeze_timer(state)
+                    state = transition(state, "end_early")
+                    _set_state(state)
+                    await _handle_completed(state)
+                else:
+                    await _freeze_timer(state)
+                    answer = res.get("payload", {}).get("value", "")
+                    # Echo the chosen answer in a permanent message
+                    await cl.Message(content=f"**Your answer:** {answer}").send()
+                    await _handle_answer(state, answer)
+            return
 
+    # ── Yes/No branch ──
     if q.question_type == QuestionType.YES_NO:
         yn_actions = [
             cl.Action(name="_yn_yes", payload={"value": "Yes"}, label="Yes"),
@@ -362,10 +420,12 @@ async def _show_question(state: SessionState):
             else:
                 await _freeze_timer(state)
                 answer = res.get("payload", {}).get("value", "")
+                # Echo the chosen answer in a permanent message
+                await cl.Message(content=f"**Your answer:** {answer}").send()
                 await _handle_answer(state, answer)
         return
 
-    # Open-ended, coding, debugging, behavioral, system design
+    # ── Open-ended / coding / debugging / behavioral / system design ──
     actions = [
         cl.Action(name="answer", payload={}, label="Answer"),
         cl.Action(name="skip", payload={}, label="Skip"),
@@ -390,12 +450,25 @@ async def _show_question(state: SessionState):
         _set_state(state)
         await _handle_completed(state)
     elif name == "answer":
+        if q.question_type in (QuestionType.CODING, QuestionType.DEBUGGING):
+            prompt_text = (
+                "Please paste your code below. Wrap it in triple backticks with the language for syntax highlighting:\n\n"
+                "\\`\\`\\`python\n# Your code here\n\\`\\`\\`"
+            )
+        else:
+            prompt_text = "Please type your answer below:"
         answer_res = await cl.AskUserMessage(
-            content="Please type your answer below:",
+            content=prompt_text,
             timeout=get_timer_limit(),
         ).send()
         if answer_res:
             answer_text = answer_res["output"].strip()
+            if q.question_type in (QuestionType.CODING, QuestionType.DEBUGGING):
+                # Strip surrounding triple-backtick fences if present
+                import re
+                answer_text = re.sub(r'^```\w*\n?', '', answer_text)
+                answer_text = re.sub(r'\n?```$', '', answer_text)
+                answer_text = answer_text.strip()
             await _freeze_timer(state)
             await _handle_answer(state, answer_text)
         else:
@@ -492,10 +565,18 @@ async def _show_feedback(state: SessionState, eval_failed: bool = False):
         content += "⚠️ **Evaluation encountered an error.** You can retry below.\n\n"
     if eval_.actionable_feedback:
         content += f"**Actionable Feedback:** {eval_.actionable_feedback}\n\n"
-    if eval_.grammar_correction:
-        content += f"**Grammar Correction:** {eval_.grammar_correction}\n\n"
-    if eval_.simplified_version:
-        content += f"**Simplified Version:** {eval_.simplified_version}"
+
+    is_code = q.question_type in (QuestionType.CODING, QuestionType.DEBUGGING)
+    if is_code:
+        if eval_.code_review:
+            content += f"**Code Review:** {eval_.code_review}\n\n"
+        if eval_.code_fix:
+            content += f"**Corrected Code:**\n```{q.language}\n{eval_.code_fix}\n```\n\n"
+    else:
+        if eval_.grammar_correction:
+            content += f"**Grammar Correction:** {eval_.grammar_correction}\n\n"
+        if eval_.simplified_version:
+            content += f"**Simplified Version:** {eval_.simplified_version}"
 
     await cl.Message(content=content).send()
 

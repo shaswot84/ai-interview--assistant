@@ -126,6 +126,8 @@ class Evaluation(BaseModel):
     weaknesses: list[str]
     grammar_correction: str
     simplified_version: str
+    code_fix: str = ""
+    code_review: str = ""
     actionable_feedback: str
 
     @field_validator("scores")

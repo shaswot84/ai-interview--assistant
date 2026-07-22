@@ -875,6 +875,30 @@ Do not use Markdown.
 Do not include any additional text.
 """
 
+_FEEDBACK_CODE_PROMPT = """You are a helpful coding interview coach. Based on the evaluation below, generate coaching output for a coding answer.
+
+Evaluation:
+{stage1_json}
+
+Provide:
+- strengths: Exactly THREE concise strengths about the code
+- weaknesses: Exactly THREE concise weaknesses about the code
+- code_fix: Provide a corrected version of the candidate's code with comments explaining each fix. Use proper indentation and syntax.
+- code_review: A short paragraph explaining the main issues and how to improve the solution.
+- actionable_feedback: Provide specific advice explaining WHAT is missing and HOW to improve.
+
+Return ONLY a valid JSON object with this structure:
+{{
+  "strengths": ["...", "...", "..."],
+  "weaknesses": ["...", "...", "..."],
+  "code_fix": "def solve(nums):\\n    # corrected implementation\\n    ...",
+  "code_review": "...",
+  "actionable_feedback": "..."
+}}
+
+Do not use Markdown. Do not include any additional text.
+"""
+
 EVALUATION_PROMPT = (
     _EVALUATION_SYSTEM_PROMPT
     + _EVALUATION_GENERAL_RULES
@@ -1144,3 +1168,8 @@ def get_strict_evaluation_prompt(question: str, answer: str, profile, question_t
 def get_feedback_prompt(stage1_json: str) -> str:
     """Build the feedback prompt (Stage 2) — coaching only, no scoring."""
     return _FEEDBACK_PROMPT.format(stage1_json=stage1_json)
+
+
+def get_feedback_code_prompt(stage1_json: str) -> str:
+    """Build the code feedback prompt (Stage 2 for coding/debugging) — code review + fix."""
+    return _FEEDBACK_CODE_PROMPT.format(stage1_json=stage1_json)

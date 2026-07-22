@@ -37,6 +37,10 @@ Personalised mock interview app powered by an OpenAI-compatible LLM. Built with 
 - `synthesize_scorecard()` uses structured `_build_evaluation_json()` as primary LLM input; deterministic stats from `scoring.py` are merged into the Scorecard after the LLM call
 - `scoring.py` has 6 deterministic stat functions: `compute_interview_stats`, `compute_strongest_weakest_dimensions`, `compute_question_table`, `interpret_radar_chart`, `compute_confidence_notice`, `_compute_highest_lowest`
 - `_ScorecardResponse` in `llm_client.py` covers only the LLM-generated subset (9 fields); deterministic fields are filled in Python
+- `_question_badge_html()` renders colored type + category badges on every question (CODING, BEHAVIORAL, MCQ, etc.)
+- MCQ options are echoed as a permanent message after selection; empty MCQ options fall back to open-ended with a log warning
+- `_FEEDBACK_CODE_PROMPT` generates `code_fix` + `code_review` for coding/debugging questions instead of grammar/simplified; `_generate_feedback()` dispatches on `QuestionType`
+- Coding/debugging answers get a backtick-guidance prompt; surrounding ``` fences are stripped
 
 ## State Machine
 ```
