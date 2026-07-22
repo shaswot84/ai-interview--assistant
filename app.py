@@ -222,7 +222,7 @@ async def on_retry_evaluation(action: cl.Action):
     except Exception:
         from schemas import Evaluation
         eval_ = Evaluation(
-            clarity=5, completeness=5, relevance=5, grammar=5, impact=5,
+            scores={},
             grammar_correction="", simplified_version="",
             actionable_feedback="Evaluation unavailable due to an error.",
         )
@@ -381,7 +381,7 @@ async def _handle_answer(state: SessionState, answer: str):
     except Exception:
         from schemas import Evaluation
         eval_ = Evaluation(
-            clarity=5, completeness=5, relevance=5, grammar=5, impact=5,
+            scores={},
             grammar_correction="", simplified_version="",
             actionable_feedback="Evaluation unavailable due to an error.",
         )
@@ -428,17 +428,17 @@ async def _show_feedback(state: SessionState, eval_failed: bool = False):
 
     from scoring import calculate_question_score
     total = calculate_question_score(eval_)
+    score_rows = "".join(
+        f"| {k.capitalize()} | {v}/10 |\n"
+        for k, v in eval_.scores.items()
+    )
     content = (
         f"### Feedback\n\n"
         f"**Question:** {q.text}\n\n"
         f"**Overall Score:** {total}/100\n\n"
         f"| Dimension | Score |\n"
         f"|-----------|-------|\n"
-        f"| Clarity | {eval_.clarity}/10 |\n"
-        f"| Completeness | {eval_.completeness}/10 |\n"
-        f"| Relevance | {eval_.relevance}/10 |\n"
-        f"| Grammar | {eval_.grammar}/10 |\n"
-        f"| Impact | {eval_.impact}/10 |\n\n"
+        f"{score_rows}\n"
     )
     if eval_failed:
         content += "⚠️ **Evaluation encountered an error.** You can retry below.\n\n"
@@ -493,7 +493,7 @@ async def _handle_retry(state: SessionState):
     except Exception:
         from schemas import Evaluation
         eval_ = Evaluation(
-            clarity=5, completeness=5, relevance=5, grammar=5, impact=5,
+            scores={},
             grammar_correction="", simplified_version="",
             actionable_feedback="Evaluation unavailable due to an error.",
         )

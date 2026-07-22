@@ -69,7 +69,7 @@ def test_answer_evaluation_latency(profile, sample_questions):
     eval_ = evaluate_answer(sample_questions[0], answer, profile)
     elapsed = time.time() - start
     assert elapsed < 3.0, f"Answer evaluation took {elapsed:.2f}s (limit 3s)"
-    assert eval_.clarity >= 1
+    assert any(v >= 1 for v in eval_.scores.values())
 
 
 @pytest.mark.slow
@@ -81,8 +81,7 @@ def test_scorecard_synthesis_latency(profile, sample_questions):
     state.transcript = {q.id: "A sample answer." for q in sample_questions}
     state.evaluations = {
         q.id: Evaluation(
-            clarity=7, completeness=7, relevance=7, grammar=7, impact=7,
-            technical_depth=7, architecture_design=7, problem_solving=7, tradeoff_analysis=7,
+            scores={"clarity": 7, "correctness": 7},
             strengths=[], weaknesses=[],
             grammar_correction="", simplified_version="", actionable_feedback="",
         ) for q in sample_questions

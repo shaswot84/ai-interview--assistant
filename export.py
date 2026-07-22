@@ -66,10 +66,9 @@ def generate_markdown_transcript(state: SessionState) -> str:
         else:
             lines.append("*(Skipped)*")
         eval_ = state.evaluations.get(q.id)
-        if eval_:
-            dims = ["Clarity", "Completeness", "Relevance", "Grammar", "Impact"]
-            scores = [f"{d}: {getattr(eval_, d.lower())}/10" for d in dims]
-            lines.append(f"**Scores:** {' | '.join(scores)}")
+        if eval_ and eval_.scores:
+            parts = [f"{k.capitalize()}: {v}/10" for k, v in eval_.scores.items()]
+            lines.append(f"**Scores:** {' | '.join(parts)}")
         lines.append("")
 
     if state.scorecard:

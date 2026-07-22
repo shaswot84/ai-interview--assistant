@@ -21,16 +21,12 @@ class QuestionsResponse(BaseModel):
 
 
 class _EvaluationResponse(BaseModel):
-    """Internal Pydantic model for the LLM's evaluation response (raw scores)."""
-    clarity: int
-    completeness: int
-    relevance: int
-    grammar: int
-    impact: int
-    technical_depth: int
-    architecture_design: int
-    problem_solving: int
-    tradeoff_analysis: int
+    """Internal Pydantic model for the LLM's evaluation response.
+
+    Accepts arbitrary extra fields as dimension scores so each question
+    type can return its own set of relevant metrics.
+    """
+    model_config = {"extra": "allow"}
     strengths: list[str]
     weaknesses: list[str]
     grammar_correction: str
@@ -149,17 +145,15 @@ def _evaluate_objective(question: Question, answer: str) -> Evaluation:
     correct = expected == given
     if correct:
         return Evaluation(
-            clarity=10, completeness=10, relevance=10, grammar=10, impact=10,
-            technical_depth=10, architecture_design=10, problem_solving=10, tradeoff_analysis=10,
+            scores={"correctness": 10},
             strengths=["Correct answer"],
             weaknesses=[],
             grammar_correction="",
             simplified_version="",
-            actionable_feedback=f"Correct.",
+            actionable_feedback="Correct.",
         )
     return Evaluation(
-        clarity=1, completeness=1, relevance=1, grammar=1, impact=1,
-        technical_depth=1, architecture_design=1, problem_solving=1, tradeoff_analysis=1,
+        scores={"correctness": 1},
         strengths=[],
         weaknesses=["Incorrect answer"],
         grammar_correction="",
@@ -174,13 +168,17 @@ def _evaluate_llm(
     profile: UserProfile,
 ) -> Evaluation:
     """LLM-based evaluation for free-response question types.
-    
-    Scores are clamped to the 1-10 range before returning.
+
+    Passes the question type to the prompt so it returns only relevant
+    dimensions. Scores are clamped to the 1-10 range before returning.
     """
     messages = [
         {
             "role": "system",
-            "content": get_evaluation_prompt(question.text, answer, profile),
+            "content": get_evaluation_prompt(
+                question.text, answer, profile,
+                question_type=question.question_type.value,
+            ),
         },
         {
             "role": "user",
@@ -188,16 +186,18 @@ def _evaluate_llm(
         },
     ]
     result = _call_with_retry(messages, _EvaluationResponse, temperature=config.evaluation_temperature)
+
+    # Extract dimension scores from extra fields (anything not a known field)
+    KNOWN_FIELDS = {"strengths", "weaknesses", "grammar_correction", "simplified_version", "actionable_feedback"}
+    scores: dict[str, int] = {}
+    for key, val in result.model_dump().items():
+        if key in KNOWN_FIELDS:
+            continue
+        if isinstance(val, (int, float)):
+            scores[key] = max(1, min(10, int(val)))
+
     return Evaluation(
-        clarity=max(1, min(10, result.clarity)),
-        completeness=max(1, min(10, result.completeness)),
-        relevance=max(1, min(10, result.relevance)),
-        grammar=max(1, min(10, result.grammar)),
-        impact=max(1, min(10, result.impact)),
-        technical_depth=max(1, min(10, result.technical_depth)),
-        architecture_design=max(1, min(10, result.architecture_design)),
-        problem_solving=max(1, min(10, result.problem_solving)),
-        tradeoff_analysis=max(1, min(10, result.tradeoff_analysis)),
+        scores=scores,
         strengths=result.strengths,
         weaknesses=result.weaknesses,
         grammar_correction=result.grammar_correction,
@@ -216,17 +216,8 @@ def _format_transcript(state: SessionState) -> str:
         if answer is not None:
             lines.append(f"A: {answer}")
         if eval_ is not None:
-            lines.append(
-                f"Scores — Clarity: {eval_.clarity}/10, "
-                f"Completeness: {eval_.completeness}/10, "
-                f"Relevance: {eval_.relevance}/10, "
-                f"Grammar: {eval_.grammar}/10, "
-                f"Impact: {eval_.impact}/10, "
-                f"Technical Depth: {eval_.technical_depth}/10, "
-                f"Architecture Design: {eval_.architecture_design}/10, "
-                f"Problem Solving: {eval_.problem_solving}/10, "
-                f"Trade-off Analysis: {eval_.tradeoff_analysis}/10"
-            )
+            parts = [f"{k.capitalize()}: {v}/10" for k, v in eval_.scores.items()]
+            lines.append("Scores — " + ", ".join(parts))
         lines.append("")
     return "\n".join(lines)
 

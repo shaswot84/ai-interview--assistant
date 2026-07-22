@@ -6,7 +6,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class Seniority(str, Enum):
@@ -83,21 +83,21 @@ class Question(BaseModel):
 
 
 class Evaluation(BaseModel):
-    """Scores for a single answer across communication and technical dimensions."""
-    clarity: int = Field(..., ge=1, le=10)
-    completeness: int = Field(..., ge=1, le=10)
-    relevance: int = Field(..., ge=1, le=10)
-    grammar: int = Field(..., ge=1, le=10)
-    impact: int = Field(..., ge=1, le=10)
-    technical_depth: int = Field(..., ge=1, le=10)
-    architecture_design: int = Field(..., ge=1, le=10)
-    problem_solving: int = Field(..., ge=1, le=10)
-    tradeoff_analysis: int = Field(..., ge=1, le=10)
+    """Scores for a single answer — dynamic dimensions per question type."""
+    scores: dict[str, int]
     strengths: list[str]
     weaknesses: list[str]
     grammar_correction: str
     simplified_version: str
     actionable_feedback: str
+
+    @field_validator("scores")
+    @classmethod
+    def validate_scores(cls, v: dict[str, int]) -> dict[str, int]:
+        for key, val in v.items():
+            if not isinstance(val, int) or val < 1 or val > 10:
+                raise ValueError(f"Score for '{key}' must be 1-10, got {val}")
+        return v
 
 
 class Scorecard(BaseModel):

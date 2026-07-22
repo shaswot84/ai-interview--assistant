@@ -63,10 +63,8 @@ VALID_EVALUATION_JSON = """{
   "clarity": 8,
   "completeness": 7,
   "relevance": 9,
-  "grammar": 6,
-  "impact": 8,
+  "correctness": 8,
   "technical_depth": 7,
-  "architecture_design": 6,
   "problem_solving": 8,
   "tradeoff_analysis": 6,
   "strengths": ["Clear", "Structured", "Relevant"],
@@ -145,25 +143,24 @@ class TestEvaluateAnswer:
     @patch("llm_client._call_with_retry")
     def test_returns_evaluation(self, mock_call):
         mock_call.return_value = _EvaluationResponse(
-            clarity=8,
-            completeness=7,
-            relevance=9,
-            grammar=6,
-            impact=8,
-            technical_depth=7,
-            architecture_design=6,
-            problem_solving=8,
-            tradeoff_analysis=6,
             strengths=["Clear", "Structured", "Relevant"],
             weaknesses=["Depth", "Trade-offs", "Grammar"],
             grammar_correction="Fixed.",
             simplified_version="Simple.",
             actionable_feedback="More detail.",
+            # Extra fields → dimension scores
+            clarity=8,
+            completeness=7,
+            relevance=9,
+            correctness=8,
+            technical_depth=7,
+            problem_solving=8,
+            tradeoff_analysis=6,
         )
         result = evaluate_answer(A_QUESTION, "My answer", A_PROFILE)
         assert isinstance(result, Evaluation)
-        assert result.clarity == 8
-        assert result.technical_depth == 7
+        assert result.scores["clarity"] == 8
+        assert result.scores["technical_depth"] == 7
         assert result.strengths == ["Clear", "Structured", "Relevant"]
 
 
@@ -177,7 +174,7 @@ class TestEvaluateAnswerDeterministic:
         )
         result = evaluate_answer(q, "4", A_PROFILE)
         assert isinstance(result, Evaluation)
-        assert result.clarity == 10
+        assert result.scores["correctness"] == 10
         assert result.actionable_feedback == "Correct."
         assert result.strengths == ["Correct answer"]
 
@@ -187,7 +184,7 @@ class TestEvaluateAnswerDeterministic:
             question_type=QuestionType.MCQ, correct_answer="4",
         )
         result = evaluate_answer(q, "5", A_PROFILE)
-        assert result.clarity == 1
+        assert result.scores["correctness"] == 1
         assert "Incorrect" in result.actionable_feedback
         assert "4" in result.actionable_feedback
         assert result.weaknesses == ["Incorrect answer"]
@@ -198,7 +195,7 @@ class TestEvaluateAnswerDeterministic:
             question_type=QuestionType.MCQ, correct_answer="Representational State Transfer",
         )
         result = evaluate_answer(q, "representational state transfer", A_PROFILE)
-        assert result.clarity == 10
+        assert result.scores["correctness"] == 10
         assert result.actionable_feedback == "Correct."
 
     def test_yes_no_correct(self):
@@ -207,7 +204,7 @@ class TestEvaluateAnswerDeterministic:
             question_type=QuestionType.YES_NO, correct_answer="Yes",
         )
         result = evaluate_answer(q, "Yes", A_PROFILE)
-        assert result.clarity == 10
+        assert result.scores["correctness"] == 10
         assert result.actionable_feedback == "Correct."
 
     def test_yes_no_wrong(self):
@@ -216,7 +213,7 @@ class TestEvaluateAnswerDeterministic:
             question_type=QuestionType.YES_NO, correct_answer="Yes",
         )
         result = evaluate_answer(q, "No", A_PROFILE)
-        assert result.clarity == 1
+        assert result.scores["correctness"] == 1
         assert "Incorrect" in result.actionable_feedback
 
     def test_mcq_no_correct_answer_falls_back_to_empty(self):
@@ -225,7 +222,7 @@ class TestEvaluateAnswerDeterministic:
             question_type=QuestionType.MCQ, correct_answer=None,
         )
         result = evaluate_answer(q, "anything", A_PROFILE)
-        assert result.clarity == 1  # None stripped to "" doesn't match "anything"
+        assert result.scores["correctness"] == 1
 
 
 class TestSynthesizeScorecard:

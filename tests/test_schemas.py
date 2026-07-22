@@ -57,78 +57,44 @@ class TestQuestion:
 
 
 class TestEvaluation:
-    """Evaluation scores must be in the 1–10 range for all dimensions."""
+    """Evaluation scores dict values must be in the 1–10 range."""
 
     def test_valid_evaluation(self):
         eval_ = Evaluation(
-            clarity=8,
-            completeness=7,
-            relevance=9,
-            grammar=6,
-            impact=8,
-            technical_depth=7,
-            architecture_design=6,
-            problem_solving=8,
-            tradeoff_analysis=7,
+            scores={"clarity": 8, "correctness": 9},
             strengths=["S1", "S2", "S3"],
             weaknesses=["W1", "W2", "W3"],
             grammar_correction="Fixed grammar.",
             simplified_version="Simple version.",
             actionable_feedback="Be more specific.",
         )
-        assert eval_.clarity == 8
+        assert eval_.scores["clarity"] == 8
+        assert eval_.scores["correctness"] == 9
 
     def test_rejects_score_below_1(self):
         with pytest.raises(ValidationError):
             Evaluation(
-                clarity=0,
-                completeness=5,
-                relevance=5,
-                grammar=5,
-                impact=5,
-                technical_depth=5,
-                architecture_design=5,
-                problem_solving=5,
-                tradeoff_analysis=5,
-                strengths=[],
-                weaknesses=[],
-                grammar_correction="x",
-                simplified_version="y",
-                actionable_feedback="z",
+                scores={"clarity": 0, "correctness": 5},
+                strengths=[], weaknesses=[],
+                grammar_correction="x", simplified_version="y", actionable_feedback="z",
             )
 
     def test_rejects_score_above_10(self):
         with pytest.raises(ValidationError):
             Evaluation(
-                clarity=11,
-                completeness=5,
-                relevance=5,
-                grammar=5,
-                impact=5,
-                technical_depth=5,
-                architecture_design=5,
-                problem_solving=5,
-                tradeoff_analysis=5,
-                strengths=[],
-                weaknesses=[],
-                grammar_correction="x",
-                simplified_version="y",
-                actionable_feedback="z",
+                scores={"clarity": 11, "correctness": 5},
+                strengths=[], weaknesses=[],
+                grammar_correction="x", simplified_version="y", actionable_feedback="z",
             )
 
     def test_rejects_any_dimension_out_of_bounds(self):
-        all_dims = ("clarity", "completeness", "relevance", "grammar", "impact",
-                    "technical_depth", "architecture_design", "problem_solving", "tradeoff_analysis")
         base = {
-            "clarity": 5, "completeness": 5, "relevance": 5, "grammar": 5, "impact": 5,
-            "technical_depth": 5, "architecture_design": 5, "problem_solving": 5, "tradeoff_analysis": 5,
             "strengths": [], "weaknesses": [],
             "grammar_correction": "x", "simplified_version": "y", "actionable_feedback": "z",
         }
-        for field in all_dims:
-            kwargs = {**base, field: 11}
+        for val in (0, 11, -1, 100):
             with pytest.raises(ValidationError):
-                Evaluation(**kwargs)
+                Evaluation(scores={"dummy": val}, **base)
 
 
 class TestScorecard:

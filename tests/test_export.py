@@ -29,8 +29,7 @@ SAMPLE_STATE = SessionState(
     },
     evaluations={
         "q1": Evaluation(
-            clarity=8, completeness=7, relevance=9, grammar=6, impact=8,
-            technical_depth=7, architecture_design=6, problem_solving=8, tradeoff_analysis=6,
+            scores={"clarity": 8, "completeness": 7, "relevance": 9, "correctness": 8},
             strengths=["S1", "S2", "S3"], weaknesses=["W1", "W2", "W3"],
             grammar_correction="Fixed.",
             simplified_version="Simple.",
@@ -69,6 +68,7 @@ class TestGenerateMarkdownTranscript:
         md = generate_markdown_transcript(SAMPLE_STATE)
         assert "Clarity: 8/10" in md
         assert "Completeness: 7/10" in md
+        assert "Correctness: 8/10" in md
 
     def test_includes_scorecard(self):
         md = generate_markdown_transcript(SAMPLE_STATE)

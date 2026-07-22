@@ -5,40 +5,14 @@ import plotly.io as pio
 
 from schemas import Evaluation, LetterGrade
 
-# Weight distribution for communication and technical dimensions
-WEIGHTS = {
-    "clarity": 0.10,
-    "completeness": 0.10,
-    "relevance": 0.10,
-    "grammar": 0.05,
-    "impact": 0.10,
-    "technical_depth": 0.15,
-    "architecture_design": 0.15,
-    "problem_solving": 0.15,
-    "tradeoff_analysis": 0.10,
-}
-
-# Ordered list of dimension keys (used for radar chart labels)
-DIMENSIONS = [
-    "clarity", "completeness", "relevance", "grammar", "impact",
-    "technical_depth", "architecture_design", "problem_solving", "tradeoff_analysis",
-]
-
 
 def calculate_question_score(eval_: Evaluation) -> float:
-    """Compute a weighted score (0–100) for a single evaluation."""
-    score = (
-        eval_.clarity * WEIGHTS["clarity"]
-        + eval_.completeness * WEIGHTS["completeness"]
-        + eval_.relevance * WEIGHTS["relevance"]
-        + eval_.grammar * WEIGHTS["grammar"]
-        + eval_.impact * WEIGHTS["impact"]
-        + eval_.technical_depth * WEIGHTS["technical_depth"]
-        + eval_.architecture_design * WEIGHTS["architecture_design"]
-        + eval_.problem_solving * WEIGHTS["problem_solving"]
-        + eval_.tradeoff_analysis * WEIGHTS["tradeoff_analysis"]
-    )
-    return round(score * 10, 1)
+    """Compute an overall score (0–100) from the average of all dimension scores."""
+    dims = eval_.scores
+    if not dims:
+        return 0.0
+    avg = sum(dims.values()) / len(dims)
+    return round(avg * 10, 1)
 
 
 def calculate_overall_score(evaluations: dict[str, Evaluation]) -> float:
@@ -63,28 +37,35 @@ def get_letter_grade(score: float) -> LetterGrade:
 
 
 def prepare_radar_chart_data(evaluations: dict[str, Evaluation]) -> dict[str, float]:
-    """Average each dimension across all evaluations for the radar chart."""
+    """Average each dimension across all evaluations for the radar chart.
+
+    Collects all unique dimension keys across evaluations so the chart
+    dynamically adapts per question type. Each dimension is averaged
+    only over the evaluations that contain it.
+    """
     if not evaluations:
-        return {d: 0.0 for d in DIMENSIONS}
-    totals = {d: 0.0 for d in DIMENSIONS}
+        return {}
+    totals: dict[str, float] = {}
+    counts: dict[str, int] = {}
     for e in evaluations.values():
-        totals["clarity"] += e.clarity
-        totals["completeness"] += e.completeness
-        totals["relevance"] += e.relevance
-        totals["grammar"] += e.grammar
-        totals["impact"] += e.impact
-        totals["technical_depth"] += e.technical_depth
-        totals["architecture_design"] += e.architecture_design
-        totals["problem_solving"] += e.problem_solving
-        totals["tradeoff_analysis"] += e.tradeoff_analysis
-    n = len(evaluations)
-    return {d: round(totals[d] / n, 1) for d in DIMENSIONS}
+        for k, v in e.scores.items():
+            totals[k] = totals.get(k, 0.0) + v
+            counts[k] = counts.get(k, 0) + 1
+    return {
+        k: round(totals[k] / counts[k], 1)
+        for k in sorted(totals)
+        if counts[k] > 0
+    }
 
 
 def render_radar_chart(data: dict[str, float]) -> go.Figure:
     """Render a Plotly polar radar chart from averaged dimension scores."""
-    labels = [d.capitalize() for d in DIMENSIONS]
-    values = [data.get(d, 0) for d in DIMENSIONS]
+    if not data:
+        labels = [""]
+        values = [0]
+    else:
+        labels = [k.capitalize() for k in data]
+        values = list(data.values())
     fig = go.Figure(
         data=go.Scatterpolar(
             r=values + [values[0]],
