@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 
 import chainlit as cl
 
-from export import generate_markdown_transcript, generate_pdf
+from export import generate_markdown_transcript, generate_pdf, generate_scorecard_markdown
 from llm_client import evaluate_answer, generate_questions, synthesize_scorecard, validate_role
 from schemas import InterviewState, InterviewerStyle, QuestionConfig, QuestionType, Seniority, SessionState, UserProfile
 from scoring import get_letter_grade, prepare_radar_chart_data, render_radar_chart
@@ -220,20 +220,22 @@ async def on_feedback_finish(action: cl.Action):
 async def on_export_pdf(action: cl.Action):
     """Export the full interview transcript as a PDF file."""
     state = _get_state()
-    path = f"/tmp/interview_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.pdf"
+    ts = datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')
+    path = f"/tmp/interview_transcript_{ts}.pdf"
     generate_pdf(state, path)
     await cl.Message(content="", elements=[cl.File(path=path, name="interview_transcript.pdf")]).send()
 
 
 @cl.action_callback("export_md")
 async def on_export_md(action: cl.Action):
-    """Export the full interview transcript as a Markdown file."""
+    """Export the full scorecard assessment as a Markdown file."""
     state = _get_state()
-    md = generate_markdown_transcript(state)
-    path = f"/tmp/interview_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.md"
+    md = generate_scorecard_markdown(state)
+    ts = datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')
+    path = f"/tmp/interview_assessment_{ts}.md"
     with open(path, "w") as f:
         f.write(md)
-    await cl.Message(content="", elements=[cl.File(path=path, name="interview_transcript.md")]).send()
+    await cl.Message(content="", elements=[cl.File(path=path, name="interview_assessment.md")]).send()
 
 
 @cl.action_callback("retry_evaluation")
@@ -555,7 +557,7 @@ async def _handle_completed(state: SessionState):
     msg = cl.Message(content="Generating your final scorecard...")
     await msg.send()
     try:
-        sc = synthesize_scorecard(state)
+        sc = await asyncio.to_thread(synthesize_scorecard, state)
         state.scorecard = sc
     except Exception:
         from schemas import Scorecard
@@ -712,8 +714,8 @@ async def _show_scorecard(state: SessionState):
 
     # Export actions
     actions = [
-        cl.Action(name="export_pdf", payload={}, label="Download PDF"),
-        cl.Action(name="export_md", payload={}, label="Download Markdown"),
+        cl.Action(name="export_pdf", payload={}, label="Download Transcript"),
+        cl.Action(name="export_md", payload={}, label="Export Assessment"),
         cl.Action(name="restart", payload={}, label="Start New Interview"),
     ]
     await cl.Message(content="What would you like to do next?", actions=actions).send()

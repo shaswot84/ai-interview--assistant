@@ -49,6 +49,129 @@ def _html_document(body_html: str) -> str:
 </html>"""
 
 
+def generate_scorecard_markdown(state: SessionState) -> str:
+    """Build a Markdown export of the full scorecard (mirrors _show_scorecard UI).
+
+    Starts from 'Interview Complete' and ends at 'Recommended Resources'.
+    Preserves headings, tables, bullet points, scores, feedback, and recommendations.
+    """
+    sc = state.scorecard
+    if sc is None:
+        return "# No scorecard available."
+
+    lines: list[str] = []
+    lines.append("# \U0001f3c6 Interview Complete")
+    lines.append("")
+    lines.append(f"**Final Grade:** {sc.grade.value}  |  **Overall Score:** {sc.overall_score:.0f}/100")
+    lines.append("")
+    if sc.hiring_recommendation:
+        lines.append(f"**Hiring Recommendation:** {sc.hiring_recommendation}")
+        lines.append("")
+    if sc.confidence_notice:
+        lines.append(sc.confidence_notice)
+        lines.append("")
+
+    if sc.overall_assessment:
+        lines.append("## \U0001f4ca Overall Assessment")
+        lines.append("")
+        lines.append(sc.overall_assessment)
+        lines.append("")
+
+    if sc.candidate_readiness:
+        lines.append("## \U0001f3af Candidate Readiness")
+        lines.append("")
+        lines.append(sc.candidate_readiness)
+        lines.append("")
+
+    stats = sc.stats
+    if stats:
+        lines.append("## \U0001f4c8 Interview Statistics")
+        lines.append("")
+        lines.append("| Metric | Value |")
+        lines.append("|--------|-------|")
+        lines.append(f"| Questions | {stats.get('total_questions', 0)} ({stats.get('answered', 0)} answered, {stats.get('skipped', 0)} skipped) |")
+        lines.append(f"| Average Score | {stats.get('overall_score', 0):.0f}/100 |")
+        lines.append(f"| Highest | {stats.get('highest_score', 0)} |  | Lowest | {stats.get('lowest_score', 0)} |")
+        lines.append(f"| Avg Confidence | {stats.get('avg_confidence', 0):.2f} |")
+        type_dist = stats.get("type_distribution", {})
+        if type_dist:
+            types_str = ", ".join(f"{t}: {n}" for t, n in sorted(type_dist.items()))
+            lines.append(f"| Types | {types_str} |")
+        lines.append("")
+
+    qtable = sc.question_table
+    if qtable:
+        lines.append("## \U0001f4cb Question-by-Question")
+        lines.append("")
+        lines.append("| # | Question | Category | Score | Rating |")
+        lines.append("|---|----------|----------|-------|--------|")
+        for row in qtable:
+            emoji = {"Excellent": "\u2705", "Strong": "\u2705", "Adequate": "\u26a0\ufe0f", "Weak": "\u274c", "Poor": "\u274c"}.get(
+                row["performance_label"], ""
+            )
+            text = row["text"][:80] + ("..." if len(row["text"]) > 80 else "")
+            lines.append(
+                f"| {row['id'][1:]} | {text} | {row['category']} | "
+                f"{row['score']}/100 | {emoji} {row['performance_label']} |"
+            )
+        lines.append("")
+
+    if sc.strongest_competencies:
+        lines.append("## \u2705 Strongest Competencies")
+        lines.append("")
+        for comp in sc.strongest_competencies:
+            lines.append(f"- **{comp.get('competency', '')}**: {comp.get('why', '')}")
+        lines.append("")
+
+    if sc.weakest_competencies:
+        lines.append("## \u274c Weakest Competencies")
+        lines.append("")
+        for comp in sc.weakest_competencies:
+            lines.append(f"- **{comp.get('competency', '')}**: {comp.get('why', '')}")
+        lines.append("")
+
+    if sc.recurring_patterns:
+        lines.append("## \U0001f501 Recurring Patterns")
+        lines.append("")
+        for pat in sc.recurring_patterns:
+            lines.append(f"- {pat}")
+        lines.append("")
+
+    if sc.key_concepts_missed:
+        lines.append("## \U0001f511 Key Concepts Missed")
+        lines.append("")
+        for concept in sc.key_concepts_missed:
+            lines.append(f"- {concept}")
+        lines.append("")
+
+    if sc.radar_interpretation:
+        lines.append("## \U0001f4e1 Radar Chart Interpretation")
+        lines.append("")
+        lines.append(f"> {sc.radar_interpretation}")
+        lines.append("")
+
+    if sc.learning_roadmap:
+        lines.append("## \U0001f4da Learning Roadmap")
+        lines.append("")
+        for item in sc.learning_roadmap:
+            lines.append(f"### Priority {item.get('priority', '?')} \u2014 {item.get('area', '')}")
+            lines.append("")
+            lines.append(f"{item.get('reason', '')}  |  Study: *{item.get('study', '')}*")
+            lines.append("")
+
+    if sc.learning_resources:
+        lines.append("## \U0001f4d6 Recommended Resources")
+        lines.append("")
+        for res in sc.learning_resources:
+            url = res.get("url", "")
+            name = res.get("name", "")
+            desc = res.get("description", "")
+            lines.append(f"- [{name}]({url}) \u2014 {desc}")
+        lines.append("")
+
+    return "\n".join(lines)
+
+
 def generate_markdown_transcript(state: SessionState) -> str:
     """Build a Markdown transcript string from the session state (profile, Q&A, scorecard)."""
     lines: list[str] = ["# Interview Transcript", ""]
