@@ -235,7 +235,7 @@ async def on_export_md(action: cl.Action):
     path = f"/tmp/interview_assessment_{ts}.md"
     with open(path, "w") as f:
         f.write(md)
-    await cl.Message(content="", elements=[cl.File(path=path, name="interview_assessment.md")]).send()
+    await cl.Message(content="", elements=[cl.File(path=path, name="interview_assessment.md", mime="text/markdown")]).send()
 
 
 @cl.action_callback("retry_evaluation")
