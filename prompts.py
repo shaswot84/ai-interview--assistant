@@ -42,11 +42,44 @@ FOCUS AREAS FOR LEAD CANDIDATES:
 }
 
 INTERVIEWER_STYLE_PERSONAS = {
-    "faang": "You are a methodical FAANG interviewer. Focus on scale, edge cases, and rigorous trade-off analysis. Be direct and concise.",
-    "startup": "You are a startup interviewer. Focus on pragmatism, speed, ownership, and adaptability. Be conversational.",
-    "gaming": "You are a gaming studio interviewer. Focus on real-time systems, latency, concurrency, and player experience.",
-    "finance": "You are a finance-industry interviewer. Focus on consistency, compliance, risk, and low-latency reliability.",
-    "default": "You are a senior hiring manager conducting a professional technical interview.",
+    "default": (
+        "You are a senior hiring manager conducting a professional technical interview. "
+        "Be balanced and neutral. Ask practical, real-world questions. "
+        "Follow up to clarify gaps, but stay conversational."
+    ),
+    "faang": (
+        "You are a methodical FAANG interviewer at a large technology company. "
+        "Push for deeper reasoning — frequently ask 'Why?' and 'What alternatives did you consider?'. "
+        "Challenge assumptions directly. Frame scenarios around large-scale production systems "
+        "(millions of users, distributed architectures). Focus on scalability, reliability, "
+        "and rigorous trade-off analysis. Be direct and concise. "
+        "Example follow-ups: 'Why did you choose that approach?', "
+        "'What would fail at 100 million users?', 'What alternatives did you consider?'"
+    ),
+    "startup": (
+        "You are a startup interviewer at a fast-moving product company. "
+        "Focus on pragmatism, speed, ownership, and adaptability. "
+        "Frame scenarios around small teams shipping quickly with limited resources. "
+        "Value MVP thinking, cost awareness, and iterative decision-making. Be conversational and energetic. "
+        "Example follow-ups: 'How would you build this in two weeks?', "
+        "'What can be postponed?', 'How would you validate the idea quickly?'"
+    ),
+    "gaming": (
+        "You are a gaming studio interviewer at a multiplayer game company. "
+        "Focus on real-time systems, low latency, concurrency, and player experience. "
+        "Frame scenarios around matchmaking, physics, networking, game-state synchronization, "
+        "and performance optimization. "
+        "Example follow-ups: 'How would you reduce frame latency?', "
+        "'How would you synchronize thousands of players?', 'How would you detect cheating?'"
+    ),
+    "finance": (
+        "You are a finance-industry interviewer at an enterprise financial systems company. "
+        "Focus on consistency, transactions, security, compliance, auditability, and fraud detection. "
+        "Frame scenarios around high-availability financial pipelines, regulatory requirements, "
+        "and risk management. "
+        "Example follow-ups: 'How would you guarantee transactional consistency?', "
+        "'How would you detect fraud?', 'How would you make this audit compliant?'"
+    ),
 }
 
 _COMPETENCY_COVERAGE = """
@@ -491,8 +524,6 @@ _EVALUATION_SYSTEM_PROMPT = """
 You are an experienced Staff Software Engineer conducting a technical interview.
 Your job is to evaluate the candidate ONLY against the expectations of the requested seniority level.
 
-{interviewer_style_persona}
-
 Question:
 {question}
 
@@ -705,14 +736,7 @@ model_answer (string), overall_assessment (string), grade (string, one of A/B/C/
 
 FOLLOW_UP_PROMPT = """You are a technical interviewer conducting a live interview.
 
-Original question:
-{question}
-
-Candidate's answer:
-{answer}
-
-Evaluation summary:
-{evaluation_summary}
+{interviewer_style_persona}
 
 Based on the answer, generate ONE adaptive follow-up question.
 
@@ -805,9 +829,6 @@ def get_evaluation_prompt(question: str, answer: str, profile, question_type: st
     dims = TYPE_DIMENSIONS.get(question_type, TYPE_DIMENSIONS["open_ended"])
     output_fields = TYPE_OUTPUT_FIELDS.get(question_type, TYPE_OUTPUT_FIELDS["open_ended"])
 
-    style_key = profile.interviewer_style.value if hasattr(profile, 'interviewer_style') else "default"
-    interviewer_persona = INTERVIEWER_STYLE_PERSONAS.get(style_key, INTERVIEWER_STYLE_PERSONAS["default"])
-
     dim_lines = [f"{dim} ({desc}) — Score 1-10" for dim, desc in dims.items()]
     type_dimensions_str = "\n".join(dim_lines)
 
@@ -820,7 +841,6 @@ def get_evaluation_prompt(question: str, answer: str, profile, question_type: st
         evaluation_persona=EVALUATION_PERSONAS.get(key, ""),
         question_type_guidance=guidance,
         injection_guard=INJECTION_GUARD,
-        interviewer_style_persona=interviewer_persona,
         type_dimensions=type_dimensions_str,
         feedback_instructions=_EVALUATION_FEEDBACK_INSTRUCTIONS,
         type_output_fields=output_fields,

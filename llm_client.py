@@ -9,7 +9,7 @@ from pydantic import BaseModel
 
 from config import config
 from fallback_data import fallback_questions
-from prompts import FOLLOW_UP_PROMPT, SCORECARD_PROMPT, get_evaluation_prompt, get_question_prompt
+from prompts import FOLLOW_UP_PROMPT, INTERVIEWER_STYLE_PERSONAS, SCORECARD_PROMPT, get_evaluation_prompt, get_question_prompt
 from providers import get_openai_client
 from schemas import Evaluation, Question, QuestionConfig, QuestionType, Scorecard, SessionState, UserProfile
 
@@ -298,12 +298,21 @@ def generate_follow_up(
     if not question.text or not answer:
         raise ValueError("Question and answer are required to generate a follow-up.")  # noqa: TRY003
 
+    style_key = profile.interviewer_style.value if hasattr(profile, 'interviewer_style') else "default"
+    interviewer_persona = INTERVIEWER_STYLE_PERSONAS.get(style_key, INTERVIEWER_STYLE_PERSONAS["default"])
+
     eval_summary = "\n".join(
         f"{dim}: {score}" for dim, score in evaluation.scores.items()
     )
+    if evaluation.weaknesses:
+        eval_summary += "\nWeaknesses: " + ", ".join(evaluation.weaknesses)
+    if evaluation.actionable_feedback:
+        eval_summary += f"\nFeedback: {evaluation.actionable_feedback}"
+
+    follow_up_prompt = FOLLOW_UP_PROMPT.format(interviewer_style_persona=interviewer_persona)
 
     messages = [
-        {"role": "system", "content": FOLLOW_UP_PROMPT},
+        {"role": "system", "content": follow_up_prompt},
         {
             "role": "user",
             "content": (
