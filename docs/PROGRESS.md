@@ -101,3 +101,14 @@
 - [x] 2026-07-22: Wired industry guardrail into `app.py` onboarding loop — invalid → retry prompt, API error → "temporarily unavailable" → retry
 - [x] 2026-07-22: 97 tests total (all green); added `test_industry_guardrail.py` (7 tests)
 - [x] 2026-07-22: Updated all docs — CLAUDE.md, architecture.md, decisions.md (ADR-013), PROGRESS.md, TESTING.md, TROUBLESHOOTING.md, logs.md, .env.example
+
+### Completed (Phase 5 — Follow-up 4)
+- [x] 2026-07-22: Removed `response_format={"type": "json_object"}` from Ollama guardrails (unsupported by Ollama); added `_parse_boolean_response()` with regex fallback in `industry_guardrail.py`
+- [x] 2026-07-22: Same fix applied to `validate_role()` in `llm_client.py` — replaced Pydantic model parsing with json.loads + regex fallback
+- [x] 2026-07-22: Added Groq raw response logging in `_call_with_retry()` at INFO level
+- [x] 2026-07-22: Removed dead `_RoleValidationResponse` class from `llm_client.py`
+- [x] 2026-07-22: **Feedback persistence fix** — split `_show_feedback()` into permanent `cl.Message` (content) + separate `AskActionMessage` (actions only), so feedback survives "Next Question" navigation
+- [x] 2026-07-22: **End Early visibility fix** — "End Early" button hidden on the last question in all three question-type paths (MCQ, YES_NO, open-ended) and on feedback for the last question
+- [x] 2026-07-22: 97 tests total (all green); added 2 regex-fallback tests in `test_industry_guardrail.py` (7 total)
+- [x] 2026-07-22: Updated all docs
+- [x] 2026-07-22: Committed and pushed to `origin/main`

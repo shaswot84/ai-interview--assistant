@@ -67,14 +67,16 @@ Env-based configuration loaded once at startup via `Config.from_env()`. Provides
 ### 3. LLM Integration (`llm_client.py` + `providers.py`)
 - `get_openai_client()` — returns OpenAI SDK client for Groq/OpenAI (used by question gen, evaluation, scorecard)
 - `get_ollama_client()` — returns OpenAI-compatible client pointed at the Ollama endpoint (used by guardrails)
-- `_call_with_retry()` — up to 2 retries with exponential backoff (OpenAI client only)
-- `validate_role(role)` — uses Ollama to classify whether a role is IT-related
+- `_call_with_retry()` — up to 2 retries with exponential backoff (OpenAI client only); logs the raw Groq response at INFO level before Pydantic validation
+- `validate_role(role)` — uses Ollama to classify whether a role is IT-related; falls back to `True` on any exception
 - `generate_questions(profile, question_config=None)` — tries LLM with optional `QuestionConfig` for type distribution; falls back to static question bank
 - `evaluate_answer(...)` — dispatches by `question.question_type`: `mcq`/`yes_no` → deterministic `_evaluate_objective()`, all others → `_evaluate_llm()` with `INJECTION_GUARD` and score clamping (1-10)
 - `synthesize_scorecard(state)` — returns `Scorecard` from full transcript
 
 ### 3a. Industry Guardrail (`industry_guardrail.py`)
-- `validate_industry(input_text)` — uses Ollama to classify whether user input is a valid industry name
+- `validate_industry(input_text)` — uses Ollama at `temperature=0` to classify whether user input is a valid industry name
+- Does **not** pass `response_format` (Ollama's OpenAI-compatible endpoint does not support it) — instead uses a two-stage parser: strict `json.loads` first, then a regex search for `"is_valid": true|false` as fallback
+- Logs the raw Ollama response at INFO level before parsing; logs the parsed boolean result
 - Returns only a boolean; never exposes model reasoning
 - Raises `RuntimeError` on API failure so the onboarding loop can show a friendly retry message
 
@@ -141,10 +143,12 @@ Chainlit callbacks mapped to state machine actions:
 - **Open-ended, behavioral, system design** — Renders the question as plain text with "Answer" button (triggers `AskUserMessage`), plus Skip and End Early buttons.
 - **Coding** — When `question_type == QuestionType.CODING` with `starter_code`, renders the starter code in a fenced Markdown code block with syntax highlighting (` ```{language} `) in the permanent message.
 - **Debugging** — When `question_type == QuestionType.DEBUGGING` with `buggy_code`, renders the buggy code in a fenced code block in the permanent message.
-- All question types display the countdown timer bar and Skip/End Early controls.
+- All question types display the countdown timer bar and Skip control. The "End Early" button is hidden on the last question (checked via `is_last`).
 
 **Feedback (`_show_feedback`):**
-- Uses `cl.AskActionMessage` with inline action handling (rather than registering separate `@cl.action_callback` handlers) — this ensures all feedback buttons remain clickable.
+- Feedback content (scores, grammar correction, etc.) is sent as a permanent `cl.Message` so it persists across the entire session — navigating to the next question does not remove it.
+- Action buttons (Next Question / Finish / End Early / Retry) are sent in a separate `AskActionMessage("")` that can be consumed without affecting the visible feedback content.
+- "End Early" is hidden when `is_last` is true — only "Finish" is offered on the last question.
 - Accepts an optional `eval_failed` parameter to display error-state feedback with a retry option.
 - Retry calls `_handle_retry()` helper which re-runs `evaluate_answer()` in a thread.
 

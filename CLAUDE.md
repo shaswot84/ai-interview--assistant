@@ -20,6 +20,9 @@ Personalised mock interview app powered by an OpenAI-compatible LLM. Built with 
 - One test file per module under `tests/`
 - `Evaluation.scores` is a `dict[str, int]` — dimensions are dynamic per question type (do not add fixed fields)
 - Onboarding uses two separate guardrails backed by the Ollama API: `validate_role()` (IT-role classification) and `validate_industry()` (industry-name classification)
+- Ollama guardrails use a two-stage parser (JSON → regex fallback) — do **not** add `response_format` for Ollama calls
+- Feedback content is sent as a permanent `cl.Message`; action buttons are in a separate `AskActionMessage` — never bundle content and actions in a single `AskActionMessage`
+- "End Early" button is hidden on the last question (check `is_last`) in both `_show_question()` and `_show_feedback()`
 
 ## State Machine
 ```

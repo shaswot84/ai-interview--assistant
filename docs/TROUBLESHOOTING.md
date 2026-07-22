@@ -68,8 +68,7 @@
 - Acceptable examples: FinTech, Healthcare, Education, Retail, Manufacturing, E-commerce
 - Rejected examples: job titles ("Backend Engineer"), random text ("banana", "I like pizza"), numbers
 - If the Ollama API is unreachable, the app shows "Industry validation is temporarily unavailable. Please try again." — check `OLLAMA_BASE_URL` and `OLLAMA_API_KEY` in `.env`
-
-### `KeyError: '\n  "clarity"'` or similar format errors
+- If the API call succeeds (HTTP 200) but the error persists, the model probably returned non-JSON text. Check the app logs for the raw Ollama response — the `_parse_boolean_response()` function tries strict JSON first, then a regex fallback; if both fail, a `RuntimeError` is raised.
 
 ### `KeyError: '\n  "clarity"'` or similar format errors
 - The `EVALUATION_PROMPT` contains literal JSON braces `{`/`}` that must be escaped as `{{`/`}}` for Python's `str.format()`
@@ -78,9 +77,10 @@
 
 ### Ollama
 - Base URL: `http://localhost:11434/v1` (local) or a hosted OpenAI-compatible endpoint
-- Models: `llama3.2:3b`, `llama3.1:8b`, `mistral`, etc.
+- Models: `llama3.2:3b`, `llama3.1:8b`, `mistral`, `gemma4:31b-cloud`, etc.
 - API key: configurable via `OLLAMA_API_KEY`; local Ollama may accept any non-empty string
 - Key format: depends on the endpoint provider
+- **Known limitation:** Ollama's `/v1/chat/completions` endpoint does **not** support the `response_format={"type": "json_object"}` parameter. The guardrails (`validate_role`, `validate_industry`) omit this parameter and instead use a two-stage parser (strict JSON → regex fallback) to handle models that return freeform text around the JSON object.
 
 ## Debugging Tips
 - Set `QUESTION_TIMER_SECONDS=9999` during development to prevent timeouts

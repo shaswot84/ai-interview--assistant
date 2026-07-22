@@ -246,3 +246,22 @@
 - **Removed:** Gemini API integration (key, config field, `google-genai` dependency, `industry_guardrail.py` Gemini version, Gemini tests)
 - **Test count:** 95 total (added 5 industry guardrail tests)
 - Updated all docs — `CLAUDE.md`, `architecture.md`, `decisions.md` (ADR-013), `PROGRESS.md`, `TESTING.md`, `TROUBLESHOOTING.md`, `logs.md`, `.env.example`
+
+## Phase 5 — Guardrail Robustness & UI Fixes (2026-07-22)
+- **response_format removed from Ollama guardrails:**
+  - `validate_industry()` and `validate_role()` no longer pass `response_format={"type": "json_object"}` — Ollama's `/v1/chat/completions` endpoint does not support it, causing the model to return freeform text and `json.loads` to fail
+  - Replaced with `_parse_boolean_response()` — tries strict `json.loads` first, then a regex search for `"is_valid": true|false` (or `"is_it_role"` in `validate_role`)
+  - Added logging at each stage (input, raw response, parsed result) for debugging
+- **Groq response logging:**
+  - `_call_with_retry()` now logs the raw Groq response at INFO level before Pydantic validation
+- **Feedback persistence fix:**
+  - `_show_feedback()` previously bundled content (scores, grammar) and action buttons in a single `AskActionMessage` — when the user clicked "Next Question", Chainlit consumed the `AskActionMessage` and removed the entire message, including the feedback content
+  - Split into two messages: a permanent `cl.Message(content)` for the feedback text, then a separate `AskActionMessage("")` with only action buttons. Feedback content now persists for the entire session.
+  - Same split applied to the skipped-question branch.
+- **End Early visibility fix:**
+  - "End Early" button was displayed on every question and its feedback, even the last one where it is meaningless
+  - Added `is_last` check in `_show_question()` — conditionally omits `_end_q` / `end_early` action on the last question for all three question-type paths (MCQ, YES_NO, open-ended)
+  - Same check in `_show_feedback()` — "End Early" hidden on last-question feedback in both skipped and evaluated branches
+- **Code cleanup:** Removed unused `_RoleValidationResponse` Pydantic model and its `BaseModel` import from `llm_client.py`
+- **Test count:** 97 total (added 2 regex-fallback tests; 7 total in `test_industry_guardrail.py`)
+- Updated all docs — committed and pushed to `origin/main` as `c56ebc4`
