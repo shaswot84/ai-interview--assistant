@@ -56,25 +56,25 @@ def test_question_generation_latency(profile):
     start = time.time()
     questions = generate_questions(profile)
     elapsed = time.time() - start
-    assert elapsed < 3.0, f"Question generation took {elapsed:.2f}s (limit 3s)"
+    assert elapsed < 6.0, f"Question generation took {elapsed:.2f}s (limit 6s)"
     assert len(questions) == 5
 
 
 @pytest.mark.slow
 def test_answer_evaluation_latency(profile, sample_questions):
-    """Answer evaluation should complete in under 3 seconds."""
+    """Answer evaluation (two-stage) should complete in under 8 seconds."""
     from llm_client import evaluate_answer
     answer = "REST is an architectural style that uses HTTP methods for CRUD operations on resources."
     start = time.time()
     eval_ = evaluate_answer(sample_questions[0], answer, profile)
     elapsed = time.time() - start
-    assert elapsed < 3.0, f"Answer evaluation took {elapsed:.2f}s (limit 3s)"
+    assert elapsed < 8.0, f"Answer evaluation took {elapsed:.2f}s (limit 8s)"
     assert any(v >= 1 for v in eval_.scores.values())
 
 
 @pytest.mark.slow
 def test_scorecard_synthesis_latency(profile, sample_questions):
-    """Scorecard synthesis should complete in under 3 seconds."""
+    """Scorecard synthesis should complete in under 25 seconds."""
     from llm_client import synthesize_scorecard
     from schemas import SessionState, Evaluation
     state = SessionState(profile=profile, questions=sample_questions)
@@ -89,5 +89,5 @@ def test_scorecard_synthesis_latency(profile, sample_questions):
     start = time.time()
     sc = synthesize_scorecard(state)
     elapsed = time.time() - start
-    assert elapsed < 3.0, f"Scorecard synthesis took {elapsed:.2f}s (limit 3s)"
+    assert elapsed < 25.0, f"Scorecard synthesis took {elapsed:.2f}s (limit 25s)"
     assert sc.grade is not None

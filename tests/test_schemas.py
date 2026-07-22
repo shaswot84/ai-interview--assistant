@@ -98,26 +98,49 @@ class TestEvaluation:
 
 
 class TestScorecard:
-    """Scorecard must use a valid LetterGrade enum value."""
+    """Scorecard must use a valid LetterGrade enum value and all required fields."""
 
     def test_valid_scorecard(self):
         sc = Scorecard(
-            strengths=["Good communication"],
-            improvements=["Be more concise"],
-            model_answer="A good answer...",
             overall_assessment="Solid performance.",
+            hiring_recommendation="Hire",
+            candidate_readiness="Ready.",
+            strongest_competencies=[{"competency": "X", "why": "Y"}],
+            weakest_competencies=[{"competency": "Z", "why": "W"}],
+            recurring_patterns=["Pattern A"],
+            key_concepts_missed=["Concept X"],
+            learning_roadmap=[{"priority": 1, "area": "A", "reason": "R", "study": "S"}],
+            learning_resources=[{"name": "N", "description": "D", "url": "https://x.com"}],
+            overall_score=85.0,
             grade=LetterGrade.B,
+            question_table=[],
+            dimension_averages={},
+            stats={},
+            radar_interpretation="",
+            confidence_notice="",
         )
         assert sc.grade == LetterGrade.B
+        assert sc.overall_score == 85.0
 
     def test_rejects_invalid_grade_string(self):
         with pytest.raises(ValidationError):
             Scorecard(
-                strengths=[],
-                improvements=[],
-                model_answer="x",
                 overall_assessment="y",
+                hiring_recommendation="",
+                candidate_readiness="",
+                strongest_competencies=[],
+                weakest_competencies=[],
+                recurring_patterns=[],
+                key_concepts_missed=[],
+                learning_roadmap=[],
+                learning_resources=[],
+                overall_score=0.0,
                 grade="Z",
+                question_table=[],
+                dimension_averages={},
+                stats={},
+                radar_interpretation="",
+                confidence_notice="",
             )
 
 

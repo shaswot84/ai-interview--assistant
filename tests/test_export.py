@@ -37,11 +37,25 @@ SAMPLE_STATE = SessionState(
         ),
     },
     scorecard=Scorecard(
-        strengths=["Good communication"],
-        improvements=["Be more concise"],
-        model_answer="A comprehensive answer...",
         overall_assessment="Solid performance.",
+        hiring_recommendation="Hire",
+        candidate_readiness="Ready for Senior level.",
+        strongest_competencies=[{"competency": "API Design", "why": "Strong."}],
+        weakest_competencies=[{"competency": "Trade-offs", "why": "Missed."}],
+        recurring_patterns=["Good fundamentals."],
+        key_concepts_missed=["Caching"],
+        learning_roadmap=[{"priority": 1, "area": "Design", "reason": "Gap", "study": "Practice."}],
+        learning_resources=[{"name": "DDIA", "description": "Book.", "url": "https://example.com"}],
+        overall_score=82.0,
         grade=LetterGrade.B,
+        question_table=[
+            {"id": "q1", "text": "What is REST?", "category": "api_design",
+             "score": 82, "hiring_decision": "Hire", "confidence": 0.85, "performance_label": "Strong"},
+        ],
+        dimension_averages={"clarity": 8.0, "completeness": 7.0, "relevance": 9.0, "correctness": 8.0},
+        stats={"total_questions": 2, "answered": 1, "skipped": 1, "overall_score": 82.0},
+        radar_interpretation="Strongest area: clarity.",
+        confidence_notice="",
     ),
 )
 

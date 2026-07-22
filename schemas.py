@@ -138,12 +138,26 @@ class Evaluation(BaseModel):
 
 
 class Scorecard(BaseModel):
-    """Final interview scorecard with strengths, improvements, and grade."""
-    strengths: list[str]
-    improvements: list[str]
-    model_answer: str
-    overall_assessment: str
-    grade: LetterGrade
+    """Final interview scorecard — LLM synthesis + deterministic stats."""
+    # -- LLM-generated synthesis --
+    overall_assessment: str                # 1-2 paragraphs, evidence-backed
+    hiring_recommendation: str             # Strong Hire / Hire / Lean Hire / Lean No Hire / No Hire / Strong No Hire
+    candidate_readiness: str               # e.g. "Close to Senior level" with why
+    strongest_competencies: list[dict]     # [{"competency": "...", "why": "..."}, ...] — top 3
+    weakest_competencies: list[dict]       # [{"competency": "...", "why": "..."}, ...] — bottom 3
+    recurring_patterns: list[str]          # themes that appeared across ≥ 2 questions
+    key_concepts_missed: list[str]         # important concepts repeatedly absent
+    learning_roadmap: list[dict]           # [{"priority": 1, "area": "...", "reason": "...", "study": "..."}, ...]
+    learning_resources: list[dict]         # [{"name": "...", "description": "...", "url": "..."}, ...]
+
+    # -- Deterministic (computed in Python, not by LLM) --
+    overall_score: float                   # from calculate_overall_score()
+    grade: LetterGrade                     # from get_letter_grade()
+    question_table: list[dict]             # from compute_question_table()
+    dimension_averages: dict[str, float]   # from prepare_radar_chart_data()
+    stats: dict                            # from compute_interview_stats()
+    radar_interpretation: str              # from interpret_radar_chart()
+    confidence_notice: str                 # from compute_confidence_notice()
 
 
 class QuestionConfig(BaseModel):

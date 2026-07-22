@@ -44,12 +44,16 @@ class _EvaluationResponse(BaseModel):
 
 
 class _ScorecardResponse(BaseModel):
-    """Internal Pydantic model for the LLM's scorecard response."""
-    strengths: list[str]
-    improvements: list[str]
-    model_answer: str
+    """Internal Pydantic model for the LLM's scorecard response — LLM-generated subset."""
     overall_assessment: str
-    grade: str
+    hiring_recommendation: str
+    candidate_readiness: str
+    strongest_competencies: list[dict]
+    weakest_competencies: list[dict]
+    recurring_patterns: list[str]
+    key_concepts_missed: list[str]
+    learning_roadmap: list[dict]
+    learning_resources: list[dict]
 
 
 class _FollowUpResponse(BaseModel):
@@ -317,8 +321,35 @@ def _evaluate_llm(
     )
 
 
+def _build_evaluation_json(state: SessionState) -> str:
+    """Build a structured JSON summary of all evaluations for the scorecard prompt."""
+    import json
+    questions_data = []
+    for q in state.questions:
+        answer = state.transcript.get(q.id)
+        eval_ = state.evaluations.get(q.id)
+        entry = {
+            "id": q.id,
+            "text": q.text,
+            "category": q.category.value,
+            "question_type": q.question_type.value,
+        }
+        if answer is not None:
+            entry["answer"] = answer
+        else:
+            entry["skipped"] = True
+        if eval_ is not None:
+            entry["scores"] = eval_.scores
+            entry["score_reasons"] = eval_.score_reasons
+            entry["score_evidence"] = eval_.score_evidence
+            entry["hiring_decision"] = eval_.hiring_decision
+            entry["confidence"] = eval_.confidence
+        questions_data.append(entry)
+    return json.dumps({"questions": questions_data}, indent=2)
+
+
 def _format_transcript(state: SessionState) -> str:
-    """Format the full interview transcript as a string for the scorecard prompt."""
+    """Format the full interview transcript as a string for supplementary context."""
     lines: list[str] = []
     for q in state.questions:
         answer = state.transcript.get(q.id)
@@ -335,19 +366,37 @@ def _format_transcript(state: SessionState) -> str:
 
 def synthesize_scorecard(state: SessionState) -> Scorecard:
     """Synthesise a final scorecard from the full session state.
-    
+
+    Uses structured evaluation JSON as primary LLM input with transcript as
+    supplementary context. Merges LLM-generated synthesis with deterministic
+    stats computed in Python.
+
     Raises ValueError if the session has no profile.
     """
+    from scoring import (
+        calculate_overall_score,
+        compute_confidence_notice,
+        compute_interview_stats,
+        compute_question_table,
+        get_letter_grade,
+        interpret_radar_chart,
+        prepare_radar_chart_data,
+    )
+
+    evaluation_json = _build_evaluation_json(state)
     transcript = _format_transcript(state)
     profile = state.profile
     if profile is None:
         raise ValueError("Cannot synthesize scorecard without a profile")
+
     messages = [
         {
             "role": "system",
             "content": SCORECARD_PROMPT.format(
                 role=profile.role,
                 seniority=profile.seniority.value,
+                industry=profile.industry,
+                evaluation_json=evaluation_json,
                 transcript=transcript,
             ),
         },
@@ -357,12 +406,29 @@ def synthesize_scorecard(state: SessionState) -> Scorecard:
         },
     ]
     result = _call_with_retry(messages, _ScorecardResponse, temperature=config.scorecard_temperature)
+
+    # Compute deterministic stats in Python
+    evals = state.evaluations
+    overall = calculate_overall_score(evals)
+    grade = get_letter_grade(overall)
+
     return Scorecard(
-        strengths=result.strengths,
-        improvements=result.improvements,
-        model_answer=result.model_answer,
         overall_assessment=result.overall_assessment,
-        grade=result.grade,
+        hiring_recommendation=result.hiring_recommendation,
+        candidate_readiness=result.candidate_readiness,
+        strongest_competencies=result.strongest_competencies,
+        weakest_competencies=result.weakest_competencies,
+        recurring_patterns=result.recurring_patterns,
+        key_concepts_missed=result.key_concepts_missed,
+        learning_roadmap=result.learning_roadmap,
+        learning_resources=result.learning_resources,
+        overall_score=overall,
+        grade=grade,
+        question_table=compute_question_table(state),
+        dimension_averages=prepare_radar_chart_data(evals),
+        stats=compute_interview_stats(state),
+        radar_interpretation=interpret_radar_chart(state),
+        confidence_notice=compute_confidence_notice(state),
     )
 
 

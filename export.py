@@ -75,15 +75,41 @@ def generate_markdown_transcript(state: SessionState) -> str:
         lines.append("---")
         lines.append("## Scorecard")
         lines.append(f"**Grade:** {state.scorecard.grade.value}")
+        lines.append(f"**Overall Score:** {state.scorecard.overall_score:.0f}/100")
+        if state.scorecard.hiring_recommendation:
+            lines.append(f"**Hiring Recommendation:** {state.scorecard.hiring_recommendation}")
         lines.append(f"**Overall Assessment:** {state.scorecard.overall_assessment}")
         lines.append("")
-        lines.append("### Strengths")
-        for s in state.scorecard.strengths:
-            lines.append(f"- {s}")
-        lines.append("")
-        lines.append("### Areas for Improvement")
-        for s in state.scorecard.improvements:
-            lines.append(f"- {s}")
+        if state.scorecard.strongest_competencies:
+            lines.append("### Strongest Competencies")
+            for c in state.scorecard.strongest_competencies:
+                lines.append(f"- **{c.get('competency', '')}**: {c.get('why', '')}")
+            lines.append("")
+        if state.scorecard.weakest_competencies:
+            lines.append("### Weakest Competencies")
+            for c in state.scorecard.weakest_competencies:
+                lines.append(f"- **{c.get('competency', '')}**: {c.get('why', '')}")
+            lines.append("")
+        if state.scorecard.recurring_patterns:
+            lines.append("### Recurring Patterns")
+            for p in state.scorecard.recurring_patterns:
+                lines.append(f"- {p}")
+            lines.append("")
+        if state.scorecard.key_concepts_missed:
+            lines.append("### Key Concepts Missed")
+            for k in state.scorecard.key_concepts_missed:
+                lines.append(f"- {k}")
+            lines.append("")
+        if state.scorecard.learning_roadmap:
+            lines.append("### Learning Roadmap")
+            for item in state.scorecard.learning_roadmap:
+                lines.append(f"- **P{item.get('priority', '?')} — {item.get('area', '')}**: {item.get('study', '')}")
+            lines.append("")
+        if state.scorecard.learning_resources:
+            lines.append("### Recommended Resources")
+            for r in state.scorecard.learning_resources:
+                lines.append(f"- [{r.get('name', '')}]({r.get('url', '')}) — {r.get('description', '')}")
+            lines.append("")
 
     return "\n".join(lines)
 

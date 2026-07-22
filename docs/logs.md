@@ -265,3 +265,18 @@
 - **Code cleanup:** Removed unused `_RoleValidationResponse` Pydantic model and its `BaseModel` import from `llm_client.py`
 - **Test count:** 97 total (added 2 regex-fallback tests; 7 total in `test_industry_guardrail.py`)
 - Updated all docs — committed and pushed to `origin/main` as `c56ebc4`
+
+## Phase 5 — Scorecard Redesign (2026-07-23)
+- **Problem:** `synthesize_scorecard()` fed a flat text transcript to the LLM — no access to per-question hiring decisions, confidence scores, score evidence, question types, or aggregated stats. The 5-field `Scorecard` was too small for rich output.
+- **Solution:** Three-phase redesign:
+  1. **Deterministic stats in Python** — added 6 functions to `scoring.py`: `compute_interview_stats`, `compute_strongest_weakest_dimensions`, `compute_question_table`, `interpret_radar_chart`, `compute_confidence_notice`, `_compute_highest_lowest`
+  2. **Structured JSON to LLM** — added `_build_evaluation_json()` in `llm_client.py` to feed per-question structured data (scores, reasons, evidence, hiring_decision, confidence) to the LLM; replaced 5-field `SCORECARD_PROMPT` with 9-section structured-data prompt
+  3. **Rich rendering** — `_show_scorecard()` now renders 14 sections: header, assessment, readiness, stats table, question-by-question table, strongest/weakest competencies, recurring patterns, key concepts missed, radar chart with interpretation, learning roadmap, recommended resources
+- **Scorecard model:** expanded from 5 fields to 17: 9 LLM-generated (overall_assessment, hiring_recommendation, candidate_readiness, strongest_competencies, weakest_competencies, recurring_patterns, key_concepts_missed, learning_roadmap, learning_resources) + 8 deterministic (overall_score, grade, question_table, dimension_averages, stats, radar_interpretation, confidence_notice)
+- **LLM client:** `_ScorecardResponse` updated to 9 fields; `synthesize_scorecard()` merges LLM output with Python-computed stats; `_format_transcript()` kept for supplementary context
+- **Export:** `generate_markdown_transcript()` updated to use new Scorecard fields
+- **Tests:** fixed `conftest.py` Evaluation fixture (dict-based scores), updated `test_llm_client.py`, `test_export.py`, `test_schemas.py` to new Scorecard model
+- **Performance thresholds:** recalibrated — question gen 3s→6s, evaluation 3s→8s, scorecard synthesis 3s→25s (richer output)
+- **Test count:** 108 total (all green; 3 performance benchmarks)
+- Updated all docs — `CLAUDE.md`, `architecture.md`, `PROGRESS.md`, `PROMPTS.md`, `TESTING.md`, `logs.md`
+- **Status:** Phase 5 scorecard redesign complete

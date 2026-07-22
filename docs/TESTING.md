@@ -17,10 +17,10 @@ uv run pytest -k "test_name" -v      # Single test
 | `test_schemas.py` | Pydantic validation (invalid seniority, out-of-bounds scores) | 1 |
 | `test_providers.py` | OpenAI client returns valid JSON | 2 |
 | `test_llm_client.py` | Question generation, fallback, evaluation, deterministic dispatch, MCQ/Yes/No scoring | 2 + 5 |
-| `test_scoring.py` | Weighted scores, overall average, letter grades, radar data | 3 |
+| `test_scoring.py` | Weighted scores, overall average, letter grades, radar data, deterministic stats (interview stats, strongest/weakest dims, question table, radar interpretation, confidence notice) | 3 + 5 |
 | `test_export.py` | Markdown format, PDF file creation | 3 |
 | `test_edge_cases.py` | Injection resistance, score clamping, retry exhaustion, malformed JSON, RateLimitError, session isolation, all-skipped, fallback ratio | 4 + 5 |
-| `test_performance.py` | Latency targets (<3s: question gen, evaluation, scorecard); skipped without API key | 5 |
+| `test_performance.py` | Latency targets (6s question gen, 8s evaluation, 25s scorecard); skipped without API key | 5 |
 | `test_industry_guardrail.py` | Industry classification (valid, invalid, backend engineer, missing API key, empty response, malformed JSON, extra text) | 5 |
 
 ## Coverage Goals
@@ -28,11 +28,11 @@ uv run pytest -k "test_name" -v      # Single test
 - Timer: zero start, running, expired
 - Schemas: valid data passes, invalid data rejected
 - LLM: success path, retry path, fallback path, injection path
-- Scoring: equal-weighted average, multi-dimension mixing, grade boundaries
+- Scoring: equal-weighted average, multi-dimension mixing, grade boundaries, deterministic stats functions (interview_stats, strongest_weakest_dims, question_table with performance labels, radar_interpretation, confidence_notice)
 - Export: file created, content well-formed
 - Deterministic evaluation: MCQ correct/wrong, Yes/No, case-insensitive, null answer
 - Edge cases: out-of-range scores clamped, null LLM content handled, retry exhaustion raises, fallback question ratio correct, RateLimitError caught, session isolation
-- Performance: latency targets (<3s per LLM call) when API key is available
+- Performance: latency targets (6s question gen, 8s evaluation, 25s scorecard) when API key is available
 
 ## Conftest Fixtures
 - `sample_profile` — standard UserProfile (Senior, Backend Engineer, FinTech)
@@ -58,4 +58,4 @@ uv run pytest -k "test_name" -v      # Single test
 | Dynamic scores | Different question types | Only relevant dimensions present in `scores` dict |
 
 ## Known Flaky Tests
-- None yet
+- `test_performance.py`: API latency can cause occasional failures if the LLM provider is slow; thresholds are calibrated for typical Groq response times (6s / 8s / 25s).

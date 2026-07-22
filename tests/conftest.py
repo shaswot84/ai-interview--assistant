@@ -37,17 +37,17 @@ def sample_questions() -> list[Question]:
 
 @pytest.fixture
 def sample_evaluation() -> Evaluation:
-    """A mid-range Evaluation fixture."""
+    """A mid-range Evaluation fixture with dynamic dict-based scores."""
     return Evaluation(
-        clarity=8,
-        completeness=7,
-        relevance=9,
-        grammar=6,
-        impact=8,
-        technical_depth=7,
-        architecture_design=6,
-        problem_solving=8,
-        tradeoff_analysis=6,
+        scores={
+            "clarity": 8,
+            "completeness": 7,
+            "relevance": 9,
+            "correctness": 8,
+            "technical_depth": 7,
+            "problem_solving": 8,
+            "tradeoff_analysis": 6,
+        },
         strengths=["Clear communication", "Good structure", "Relevant examples"],
         weaknesses=["Needs more depth", "Missing trade-offs", "Grammar issues"],
         grammar_correction="Fixed grammar.",

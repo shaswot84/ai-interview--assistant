@@ -560,11 +560,22 @@ async def _handle_completed(state: SessionState):
     except Exception:
         from schemas import Scorecard
         sc = Scorecard(
-            strengths=["Interview completed"],
-            improvements=[],
-            model_answer="",
             overall_assessment="Scorecard generation was unavailable.",
+            hiring_recommendation="",
+            candidate_readiness="",
+            strongest_competencies=[],
+            weakest_competencies=[],
+            recurring_patterns=[],
+            key_concepts_missed=[],
+            learning_roadmap=[],
+            learning_resources=[],
+            overall_score=0.0,
             grade=get_letter_grade(0),
+            question_table=[],
+            dimension_averages={},
+            stats={},
+            radar_interpretation="",
+            confidence_notice="",
         )
         state.scorecard = sc
 
@@ -575,39 +586,131 @@ async def _handle_completed(state: SessionState):
 
 
 async def _show_scorecard(state: SessionState):
-    """Display the final scorecard with letter grade, radar chart, and export options."""
+    """Display the final scorecard with stats, competencies, radar chart, roadmap, and export options."""
     sc = state.scorecard
     if sc is None:
         return
 
-    overall = sc.overall_assessment
+    # Header
     content = (
         f"# 🏆 Interview Complete\n\n"
-        f"**Final Grade:** {sc.grade.value}\n\n"
-        f"**Overall Assessment:** {overall}\n\n"
+        f"**Final Grade:** {sc.grade.value}  |  **Overall Score:** {sc.overall_score:.0f}/100\n\n"
     )
-    if sc.strengths:
-        content += "### Strengths\n"
-        for s in sc.strengths:
-            content += f"- {s}\n"
-        content += "\n"
-    if sc.improvements:
-        content += "### Areas for Improvement\n"
-        for s in sc.improvements:
-            content += f"- {s}\n"
-        content += "\n"
-    if sc.model_answer:
-        content += "### Model Answer Summary\n"
-        content += f"{sc.model_answer}\n\n"
+    if sc.hiring_recommendation:
+        content += f"**Hiring Recommendation:** {sc.hiring_recommendation}\n\n"
 
+    if sc.confidence_notice:
+        content += f"{sc.confidence_notice}\n\n"
+
+    # Overall Assessment
+    if sc.overall_assessment:
+        content += f"### 📊 Overall Assessment\n\n{sc.overall_assessment}\n\n"
+
+    # Candidate Readiness
+    if sc.candidate_readiness:
+        content += f"### 🎯 Candidate Readiness\n\n{sc.candidate_readiness}\n\n"
+
+    # Interview Statistics
+    stats = sc.stats
+    if stats:
+        content += (
+            f"### 📈 Interview Statistics\n\n"
+            f"| Metric | Value |\n"
+            f"|--------|-------|\n"
+            f"| Questions | {stats.get('total_questions', 0)} "
+            f"({stats.get('answered', 0)} answered, {stats.get('skipped', 0)} skipped) |\n"
+            f"| Average Score | {stats.get('overall_score', 0):.0f}/100 |\n"
+            f"| Highest | {stats.get('highest_score', 0)} | "
+            f"Lowest | {stats.get('lowest_score', 0)} |\n"
+            f"| Avg Confidence | {stats.get('avg_confidence', 0):.2f} |\n"
+        )
+        type_dist = stats.get("type_distribution", {})
+        if type_dist:
+            types_str = ", ".join(f"{t}: {n}" for t, n in sorted(type_dist.items()))
+            content += f"| Types | {types_str} |\n"
+        content += "\n"
+
+    # Question-by-Question Table
+    qt = sc.question_table
+    if qt:
+        content += (
+            f"### 📋 Question-by-Question\n\n"
+            f"| # | Question | Category | Score | Rating |\n"
+            f"|---|----------|----------|-------|--------|\n"
+        )
+        for row in qt:
+            emoji = {"Excellent": "✅", "Strong": "✅", "Adequate": "⚠️", "Weak": "❌", "Poor": "❌"}.get(
+                row["performance_label"], ""
+            )
+            text = row["text"][:60] + ("..." if len(row["text"]) > 60 else "")
+            content += (
+                f"| {row['id'][1:]} | {text} | {row['category']} | "
+                f"{row['score']}/100 | {emoji} {row['performance_label']} |\n"
+            )
+        content += "\n"
+
+    # Strongest Competencies
+    if sc.strongest_competencies:
+        content += "### ✅ Strongest Competencies\n\n"
+        for comp in sc.strongest_competencies:
+            content += f"- **{comp.get('competency', '')}**: {comp.get('why', '')}\n"
+        content += "\n"
+
+    # Weakest Competencies
+    if sc.weakest_competencies:
+        content += "### ❌ Weakest Competencies\n\n"
+        for comp in sc.weakest_competencies:
+            content += f"- **{comp.get('competency', '')}**: {comp.get('why', '')}\n"
+        content += "\n"
+
+    # Recurring Patterns
+    if sc.recurring_patterns:
+        content += "### 🔁 Recurring Patterns\n\n"
+        for pat in sc.recurring_patterns:
+            content += f"- {pat}\n"
+        content += "\n"
+
+    # Key Concepts Missed
+    if sc.key_concepts_missed:
+        content += "### 🔑 Key Concepts Missed\n\n"
+        for concept in sc.key_concepts_missed:
+            content += f"- {concept}\n"
+        content += "\n"
+
+    # Radar Chart
     evaluations = state.evaluations
     if evaluations:
         radar_data = prepare_radar_chart_data(evaluations)
         fig = render_radar_chart(radar_data)
+        content += "### 📡 Radar Chart\n\n"
+        if sc.radar_interpretation:
+            content += f"> {sc.radar_interpretation}\n\n"
         await cl.Message(content=content, elements=[cl.Plotly(name="radar_chart", figure=fig)]).send()
     else:
         await cl.Message(content=content).send()
 
+    # Learning Roadmap
+    if sc.learning_roadmap:
+        roadmap_content = "### 📚 Learning Roadmap\n\n"
+        for item in sc.learning_roadmap:
+            roadmap_content += (
+                f"**Priority {item.get('priority', '?')} — {item.get('area', '')}**\n\n"
+                f"{item.get('reason', '')}  |  Study: *{item.get('study', '')}*\n\n"
+            )
+        await cl.Message(content=roadmap_content).send()
+
+    # Recommended Resources
+    if sc.learning_resources:
+        resources_content = "### 📖 Recommended Resources\n\n"
+        for res in sc.learning_resources:
+            url = res.get("url", "")
+            name = res.get("name", "")
+            desc = res.get("description", "")
+            resources_content += f"- [{name}]({url}) — {desc}\n"
+        resources_content += "\n"
+        await cl.Message(content=resources_content).send()
+
+    # Export actions
     actions = [
         cl.Action(name="export_pdf", payload={}, label="Download PDF"),
         cl.Action(name="export_md", payload={}, label="Download Markdown"),

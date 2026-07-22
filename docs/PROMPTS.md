@@ -266,28 +266,27 @@ Every evaluation includes `confidence: float` (0.0–1.0). Deterministic MCQ/Yes
 
 **File:** `prompts.py` → `SCORECARD_PROMPT`
 **Used by:** `llm_client.synthesize_scorecard()`
+**Input:** structured `{evaluation_json}` (primary) + `{transcript}` (supplementary) + `{role}`, `{seniority}`, `{industry}`
 
-```
-You are an interviewer synthesizing a final scorecard for a candidate.
+The prompt is a 9-section structured-data template that instructs the LLM to produce a rich synthesis report. The LLM receives per-question structured data (scores, score_reasons, score_evidence, hiring_decision, confidence) as JSON rather than a flat text transcript.
 
-Role: {role}
-Seniority: {seniority}
+### 9 Task Sections
+| Section | Field | Description |
+|---------|-------|-------------|
+| 1. Overall Assessment | `overall_assessment` | 1-2 evidence-backed paragraphs |
+| 2. Hiring Recommendation | `hiring_recommendation` | Strong Hire / Hire / Lean Hire / Lean No Hire / No Hire / Strong No Hire |
+| 3. Candidate Readiness | `candidate_readiness` | What level they currently perform at, with evidence |
+| 4. Strongest Competencies | `strongest_competencies` | Top 3 areas, each with `{competency, why}` |
+| 5. Weakest Competencies | `weakest_competencies` | Bottom 3 areas, each with `{competency, why}` |
+| 6. Recurring Patterns | `recurring_patterns` | 3-5 cross-question themes (≥2 questions) |
+| 7. Key Concepts Missed | `key_concepts_missed` | 4-6 concepts absent from answers |
+| 8. Learning Roadmap | `learning_roadmap` | 3 prioritized areas with `{priority, area, reason, study}` |
+| 9. Learning Resources | `learning_resources` | 4-5 high-quality resources with `{name, description, url}` |
 
-Interview transcript:
-{transcript}
+### Deterministic Merge
+After the LLM call, `synthesize_scorecard()` merges the 9 LLM fields with 8 Python-computed deterministic fields (overall_score, grade, question_table, dimension_averages, stats, radar_interpretation, confidence_notice) from `scoring.py` to produce the full 17-field `Scorecard`.
 
-Based on the entire interview, provide:
-- strengths: list of 2-3 things the candidate did well
-- improvements: list of 2-3 areas for improvement
-- model_answer: a comprehensive ideal answer summary covering the key topics discussed
-- overall_assessment: a concise paragraph summarising overall performance
-- grade: one of "A" (excellent), "B" (good), "C" (average), "D" (below average), "F" (poor)
-
-Return a JSON object with: strengths (array of strings), improvements (array of strings),
-model_answer (string), overall_assessment (string), grade (string, one of A/B/C/D/F).
-```
-
-**Output schema:** `Scorecard`
+**Output schema:** `Scorecard` (17 fields)
 
 ---
 
@@ -361,3 +360,4 @@ Return ONLY a valid JSON object:
 | 2026-07-22 | QUESTION_GEN_PROMPT | Added `{interviewer_style_persona}` placeholder. Added `_SCENARIO_DIVERSITY_GUARD` to quality constraints (9 blocks total). |
 | 2026-07-22 | — | Added `INTERVIEWER_STYLE_PERSONAS` dict (faang, startup, gaming, finance, default). Added `FOLLOW_UP_PROMPT` template for adaptive follow-up questions. |
 | 2026-07-22 | EVALUATION_PROMPT | Replaced `_EVALUATION_GENERAL_RULES` with anti-generosity version (START EVERY DIMENSION AT 1). Replaced `_EVALUATION_RUBRIC` with concrete anchor rubric (Strong Hire … Strong No Hire). Added two-stage pipeline: `EVALUATION_STRICT_PROMPT` (strict scoring with mandatory caps, evidence requirement, hiring decision, internal consistency) and `_FEEDBACK_PROMPT` (coaching only). Added `_EVALUATION_STRICT_SYSTEM_PROMPT`, `_MANDATORY_SCORE_CAPS`, `_HIRING_DECISION_SECTION`, `_EVIDENCE_REQUIREMENT_SECTION`, `_INTERNAL_CONSISTENCY_SECTION`, `_STRICT_SELF_VERIFICATION`, `_EVALUATION_CALIBRATION_EXAMPLES`, `_EVALUATION_STRICT_OUTPUT_SCHEMA`. Added `Evaluation.score_evidence`, `Evaluation.hiring_decision` to schema. |
+| 2026-07-23 | SCORECARD_PROMPT | Complete redesign — replaced flat 5-field prompt (strengths, improvements, model_answer, overall_assessment, grade) with structured-data 9-section prompt. Accepts `{evaluation_json}` (per-question structured data) as primary input, `{transcript}` as supplementary. Produces `_ScorecardResponse` with 9 fields. Deterministic fields (overall_score, grade, question_table, dimension_averages, stats, radar_interpretation, confidence_notice) are computed in Python and merged into the 17-field `Scorecard`. Added `_build_evaluation_json()` in `llm_client.py` to construct the structured input. |

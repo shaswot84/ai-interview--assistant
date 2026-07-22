@@ -79,11 +79,31 @@ VALID_EVALUATION_JSON = """{
 }"""
 
 VALID_SCORECARD_JSON = """{
-  "strengths": ["Good communication"],
-  "improvements": ["Be more concise"],
-  "model_answer": "A comprehensive answer...",
-  "overall_assessment": "Solid performance.",
-  "grade": "B"
+  "overall_assessment": "Solid performance across the interview.",
+  "hiring_recommendation": "Hire",
+  "candidate_readiness": "Ready for Mid-level roles based on consistent technical depth.",
+  "strongest_competencies": [
+    {"competency": "API Design", "why": "Strong grasp of RESTful principles."}
+  ],
+  "weakest_competencies": [
+    {"competency": "Trade-off Analysis", "why": "Consistently omitted trade-off discussions."}
+  ],
+  "recurring_patterns": [
+    "Good technical fundamentals across questions.",
+    "Frequently omitted trade-offs in system design answers."
+  ],
+  "key_concepts_missed": [
+    "Cache invalidation strategies",
+    "CAP theorem trade-offs",
+    "Idempotency patterns",
+    "Circuit breaker pattern"
+  ],
+  "learning_roadmap": [
+    {"priority": 1, "area": "System Design", "reason": "Missing trade-off analysis", "study": "Practice discussing trade-offs for every design decision."}
+  ],
+  "learning_resources": [
+    {"name": "Designing Data-Intensive Applications", "description": "Covers distributed systems fundamentals.", "url": "https://dataintensive.net"}
+  ]
 }"""
 
 
@@ -284,16 +304,22 @@ class TestSynthesizeScorecard:
     @patch("llm_client._call_with_retry")
     def test_returns_scorecard(self, mock_call):
         mock_call.return_value = _ScorecardResponse(
-            strengths=["Good"],
-            improvements=["Needs work"],
-            model_answer="Ideal answer",
-            overall_assessment="Decent",
-            grade="B",
+            overall_assessment="Solid performance.",
+            hiring_recommendation="Hire",
+            candidate_readiness="Ready for Mid-level.",
+            strongest_competencies=[{"competency": "API Design", "why": "Strong."}],
+            weakest_competencies=[{"competency": "Trade-offs", "why": "Missed."}],
+            recurring_patterns=["Good fundamentals."],
+            key_concepts_missed=["Caching", "CAP"],
+            learning_roadmap=[{"priority": 1, "area": "Design", "reason": "Gap", "study": "Practice."}],
+            learning_resources=[{"name": "DDIA", "description": "Great book.", "url": "https://example.com"}],
         )
         state = SessionState(profile=A_PROFILE)
         result = synthesize_scorecard(state)
         assert isinstance(result, Scorecard)
-        assert result.grade.value == "B"
+        assert result.grade.value == "F"  # No evaluations → score 0 → F
+        assert result.hiring_recommendation == "Hire"
+        assert result.overall_assessment == "Solid performance."
 
     def test_raises_without_profile(self):
         state = SessionState()

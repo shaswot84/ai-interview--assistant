@@ -71,7 +71,7 @@ Env-based configuration loaded once at startup via `Config.from_env()`. Provides
 - `validate_role(role)` — uses Ollama to classify whether a role is IT-related; falls back to `True` on any exception
 - `generate_questions(profile, question_config=None)` — tries LLM with optional `QuestionConfig` for type distribution; falls back to static question bank
 - `evaluate_answer(...)` — dispatches by `question.question_type`: `mcq`/`yes_no` → deterministic `_evaluate_objective()`, all others → `_evaluate_llm()` with `INJECTION_GUARD` and score clamping (1-10)
-- `synthesize_scorecard(state)` — returns `Scorecard` from full transcript
+- `synthesize_scorecard(state)` — feeds structured `_build_evaluation_json()` to LLM as primary input with transcript as supplementary context; merges LLM synthesis with deterministic stats from `scoring.py` to produce a 17-field `Scorecard`
 
 ### 3a. Industry Guardrail (`industry_guardrail.py`)
 - `validate_industry(input_text)` — uses Ollama at `temperature=0` to classify whether user input is a valid industry name
@@ -91,7 +91,7 @@ Env-based configuration loaded once at startup via `Config.from_env()`. Provides
 - `TYPE_DIMENSIONS` — per-type dimension sets with descriptions (e.g., open_ended has clarity/completeness/relevance/correctness/technical_depth/problem_solving/tradeoff_analysis; coding has correctness/solution_quality/technical_depth/problem_solving)
 - `TYPE_OUTPUT_FIELDS` — per-type JSON template injected into the EVALUATION_PROMPT's RETURN FORMAT section
 - `EVALUATION_PROMPT` — unified template with `question_type`, `question_type_guidance`, `type_dimensions`, and `type_output_fields` placeholders; dimensions are dynamic per type
-- `SCORECARD_PROMPT` — strengths, improvements, model answer
+- `SCORECARD_PROMPT` — structured-data prompt with 9 task sections (overall_assessment, hiring_recommendation, candidate_readiness, strongest/weakest_competencies, recurring_patterns, key_concepts_missed, learning_roadmap, learning_resources); uses `{evaluation_json}` as primary input and `{transcript}` as supplementary
 
 ### 5. Timer (`timer.py`)
 - `get_timer_limit()` — reads `QUESTION_TIMER_SECONDS` (env), default `180`
@@ -105,6 +105,12 @@ Env-based configuration loaded once at startup via `Config.from_env()`. Provides
 - `get_letter_grade(score)` → A≥90, B≥80, C≥70, D≥60, F<60
 - `prepare_radar_chart_data(transcript)` — collects all unique dimension keys across evaluations, averages per key (divided by count of evaluations containing that key, not total evaluations)
 - `render_radar_chart(data)` → Plotly figure (dynamically adapts labels to whatever keys exist in data)
+- **Deterministic stats (6 functions, no LLM):**
+  - `compute_interview_stats(state)` → dict (total/answered/skipped, overall_score, letter_grade, highest/lowest_score, avg_confidence, type_distribution, dimension_averages)
+  - `compute_strongest_weakest_dimensions(state)` → (top-3, bottom-3) dimension names
+  - `compute_question_table(state)` → list of per-question `{id, text, category, score, hiring_decision, confidence, performance_label}`
+  - `interpret_radar_chart(state)` → text summary (strongest/weakest areas, spread analysis)
+  - `compute_confidence_notice(state)` → warning string if any evaluation had confidence < 0.7
 
 ### 7. Export (`export.py`)
 - `generate_markdown_transcript(state)` — full Q&A as Markdown
@@ -120,7 +126,7 @@ Pydantic v2 models:
 - `Question` — id, text, category, question_type (open_ended|behavioral|mcq|yes_no|coding|debugging|system_design), difficulty, expected_keywords, plus optional fields: options, correct_answer, starter_code, language, evaluation_type, buggy_code, expected_fix, evaluation_focus
 - `QuestionConfig` — total_questions (default 5), distribution (map of QuestionType to percentage), with `counts()` method
 - `Evaluation` — `scores: dict[str, int]` (dynamic dimensions per question type, each validated 1-10); plus strengths, weaknesses, grammar_correction, simplified_version, actionable_feedback
-- `Scorecard` — per-question scores, overall, letter grade, radar data
+- `Scorecard` — 17-field model: 9 LLM-generated (overall_assessment, hiring_recommendation, candidate_readiness, strongest_competencies, weakest_competencies, recurring_patterns, key_concepts_missed, learning_roadmap, learning_resources) + 8 deterministic (overall_score, grade, question_table, dimension_averages, stats, radar_interpretation, confidence_notice)
 - `SessionState` — current state, profile, questions, transcript, evaluations, scorecard
 
 ### 10. UI (`app.py`)

@@ -33,6 +33,10 @@ Personalised mock interview app powered by an OpenAI-compatible LLM. Built with 
 - `scoring.calculate_question_score()` now accepts `question_type: str` for per-type weighted scoring; uses `TYPE_DIMENSION_WEIGHTS` dict
 - `llm_client.generate_follow_up()` creates adaptive follow-up questions; falls back to "Can you go deeper on that?"
 - `UserProfile` has optional `interviewer_style: InterviewerStyle` (default: DEFAULT)
+- `Scorecard` has 17 fields: 9 LLM-generated (overall_assessment, hiring_recommendation, candidate_readiness, strongest_competencies, weakest_competencies, recurring_patterns, key_concepts_missed, learning_roadmap, learning_resources) + 8 deterministic Python-computed fields
+- `synthesize_scorecard()` uses structured `_build_evaluation_json()` as primary LLM input; deterministic stats from `scoring.py` are merged into the Scorecard after the LLM call
+- `scoring.py` has 6 deterministic stat functions: `compute_interview_stats`, `compute_strongest_weakest_dimensions`, `compute_question_table`, `interpret_radar_chart`, `compute_confidence_notice`, `_compute_highest_lowest`
+- `_ScorecardResponse` in `llm_client.py` covers only the LLM-generated subset (9 fields); deterministic fields are filled in Python
 
 ## State Machine
 ```
@@ -53,8 +57,8 @@ uv run python -c "..."                   # Quick script
 
 ## Tests
 ```bash
-uv run pytest tests/ -v                 # 97 tests, all green
-uv run pytest tests/ --runslow          # Include performance benchmarks (needs API key)
+uv run pytest tests/ -v                 # 108 tests, all green
+uv run pytest tests/ -m slow            # Include performance benchmarks (needs API key)
 ```
 
 ## Documentation Index
@@ -85,10 +89,10 @@ uv run pytest tests/ --runslow          # Include performance benchmarks (needs 
 |--------|---------|
 | `config.py` | Env-based configuration |
 | `session_state.py` | State machine with guarded transitions |
-| `llm_client.py` | LLM calls for questions, evaluation, scorecard |
+| `llm_client.py` | LLM calls for questions, evaluation, scorecard (structured-data pipeline) |
 | `providers.py` | OpenAI and Ollama client factories |
 | `industry_guardrail.py` | Industry-name classification via Ollama |
-| `scoring.py` | Score calculation and radar chart |
+| `scoring.py` | Score calculation, radar chart, and deterministic stats (6 new functions) |
 | `prompts.py` | LLM prompt templates |
 | `export.py` | Markdown and PDF export |
 | `timer.py` | Per-question countdown timer |

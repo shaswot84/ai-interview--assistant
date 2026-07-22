@@ -112,3 +112,15 @@
 - [x] 2026-07-22: 97 tests total (all green); added 2 regex-fallback tests in `test_industry_guardrail.py` (7 total)
 - [x] 2026-07-22: Updated all docs
 - [x] 2026-07-22: Committed and pushed to `origin/main`
+
+### Completed (Phase 5 — Scorecard Redesign)
+- [x] 2026-07-23: Added 6 deterministic stat functions to `scoring.py`: `compute_interview_stats`, `compute_strongest_weakest_dimensions`, `compute_question_table`, `interpret_radar_chart`, `compute_confidence_notice`, `_compute_highest_lowest`
+- [x] 2026-07-23: Expanded `Scorecard` model from 5 fields to 17 fields (9 LLM-generated + 8 deterministic)
+- [x] 2026-07-23: Replaced `SCORECARD_PROMPT` with structured-data 9-section prompt accepting `{evaluation_json}` as primary input
+- [x] 2026-07-23: Added `_build_evaluation_json()` in `llm_client.py`; rewrote `synthesize_scorecard()` to merge LLM synthesis with Python stats
+- [x] 2026-07-23: Rewrote `_show_scorecard()` in `app.py` with 14 sections (header, assessment, readiness, stats table, question table, competencies, patterns, missed concepts, radar chart, roadmap, resources)
+- [x] 2026-07-23: Updated `export.py` for new Scorecard fields (strongest/weakest competencies, patterns, missed concepts, roadmap, resources)
+- [x] 2026-07-23: Fixed tests: conftest (dict-based scores), test_llm_client (updated fixtures), test_export (new Scorecard), test_schemas (new Scorecard)
+- [x] 2026-07-23: Recalibrated performance thresholds: question gen 3s→6s, evaluation 3s→8s, scorecard 3s→25s
+- [x] 2026-07-23: 108 tests total (all green; 3 performance benchmarks)
+- [x] 2026-07-23: Updated all docs — `CLAUDE.md`, `architecture.md`, `PROMPTS.md`, `TESTING.md`, `PROGRESS.md`, `logs.md`

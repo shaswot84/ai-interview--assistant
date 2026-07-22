@@ -915,23 +915,94 @@ Do NOT add or remove dimensions.
     + _EVALUATION_STRICT_OUTPUT_SCHEMA
 )
 
-SCORECARD_PROMPT = """You are an interviewer synthesizing a final scorecard for a candidate.
+SCORECARD_PROMPT = """You are a senior hiring manager writing a final interview report.
 
-Role: {role}
-Seniority: {seniority}
+Candidate: {role} at {seniority} level in {industry}.
 
-Interview transcript:
+Below is structured evaluation data for every question in the interview.
+Use it as your PRIMARY source. The transcript is supplementary context.
+
+---
+STRUCTURED EVALUATION DATA
+---
+{evaluation_json}
+
+---
+INTERVIEW TRANSCRIPT (supplementary)
+---
 {transcript}
 
-Based on the entire interview, provide:
-- strengths: list of 2-3 things the candidate did well
-- improvements: list of 2-3 areas for improvement
-- model_answer: a comprehensive ideal answer summary covering the key topics discussed
-- overall_assessment: a concise paragraph summarising overall performance
-- grade: one of "A" (excellent), "B" (good), "C" (average), "D" (below average), "F" (poor)
+---
+YOUR TASK
+---
 
-Return a JSON object with: strengths (array of strings), improvements (array of strings),
-model_answer (string), overall_assessment (string), grade (string, one of A/B/C/D/F)."""
+1. OVERALL ASSESSMENT (overall_assessment):
+Write 1-2 paragraphs summarising the candidate's performance. Every claim must reference
+specific evidence from the evaluation data. Avoid phrases like "good understanding,"
+"needs more depth," or "shows potential" unless backed by a specific score or evidence quote.
+Use the hiring decisions from individual questions to inform the overall picture.
+
+2. HIRING RECOMMENDATION (hiring_recommendation):
+Based on the per-question hiring decisions, the overall score, and the pattern of scores,
+choose ONE: Strong Hire / Hire / Lean Hire / Lean No Hire / No Hire / Strong No Hire.
+This MUST be consistent with the individual question hiring decisions and overall score.
+
+3. CANDIDATE READINESS (candidate_readiness):
+State what level the candidate is currently performing at (e.g. "Ready for Mid-level roles,"
+"Close to Senior," "Below expected Senior level") and explain WHY in 1-2 sentences
+referencing specific evidence.
+
+4. STRONGEST COMPETENCIES (strongest_competencies):
+Identify the 3 HIGHEST-PERFORMING competency areas across the interview.
+For each, return {{"competency": "name", "why": "one-sentence evidence-backed explanation"}}.
+Look across ALL questions — do NOT just list the top 3 question categories.
+Synthesize patterns.
+
+5. WEAKEST COMPETENCIES (weakest_competencies):
+Identify the 3 LOWEST-PERFORMING areas across the interview.
+For each, return {{"competency": "name", "why": "one-sentence evidence-backed explanation"}}.
+Look for RECURRING weakness themes, not isolated one-question issues.
+
+6. RECURRING PATTERNS (recurring_patterns):
+Identify themes that appeared across MULTIPLE questions (≥ 2).
+Examples: "Frequently omitted trade-offs," "Strong SQL reasoning throughout,"
+"Rarely discussed monitoring."
+Return 3-5 patterns as strings. Only include patterns supported by ≥ 2 questions.
+
+7. KEY CONCEPTS MISSED (key_concepts_missed):
+List 4-6 important concepts that repeatedly did NOT appear in the candidate's answers.
+These should be concepts that a strong candidate at this seniority would have mentioned.
+Examples: "Cache invalidation," "Circuit breakers," "CAP trade-offs," "Idempotency."
+Personalize to the actual interview content.
+
+8. LEARNING ROADMAP (learning_roadmap):
+Generate 3 prioritized areas for improvement. For each, return:
+{{"priority": 1, "area": "...", "reason": "Why this was selected, referencing specific gaps.",
+"study": "What specifically to study."}}
+Priority 1 = most impactful fix.
+
+9. LEARNING RESOURCES (learning_resources):
+Recommend 4-5 high-quality resources that directly address the candidate's weaknesses.
+For each, return {{"name": "...", "description": "Why this helps.", "url": "..."}}.
+Prefer: Designing Data-Intensive Applications, System Design Primer (GitHub),
+ByteByteGo, official docs (PostgreSQL, Redis, Kubernetes), Martin Fowler's blog.
+Do NOT recommend random blogs or low-quality sources.
+URLs must be real, working links.
+
+Return ONLY a valid JSON object with this structure:
+{{
+  "overall_assessment": "...",
+  "hiring_recommendation": "Hire",
+  "candidate_readiness": "...",
+  "strongest_competencies": [{{"competency": "...", "why": "..."}}],
+  "weakest_competencies": [{{"competency": "...", "why": "..."}}],
+  "recurring_patterns": ["...", "..."],
+  "key_concepts_missed": ["...", "..."],
+  "learning_roadmap": [{{"priority": 1, "area": "...", "reason": "...", "study": "..."}}],
+  "learning_resources": [{{"name": "...", "description": "...", "url": "..."}}]
+}}
+
+Do not use Markdown. Do not include any additional text. Return ONLY valid JSON."""
 
 FOLLOW_UP_PROMPT = """You are a technical interviewer conducting a live interview.
 
