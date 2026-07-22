@@ -25,8 +25,10 @@ Personalised mock interview app powered by an OpenAI-compatible LLM. Built with 
 - "End Early" button is hidden on the last question (check `is_last`) in both `_show_question()` and `_show_feedback()`
 - Question generation uses 9 quality constraint blocks (includes scenario diversity guard)
 - `Question.category` uses the `Competency` enum (specific competencies like `problem_solving`, `api_design`) — not the generic `QuestionCategory`
-- `Evaluation` has `score_reasons: dict[str, str]` and `confidence: float` (0.0–1.0) in addition to `scores`
-- EVALUATION_PROMPT is assembled from 5 reusable components: system prompt, general rules, rubric, feedback instructions, output schema
+- `Evaluation` has `score_reasons: dict[str, str]`, `score_evidence: dict[str, str]`, `hiring_decision: str`, and `confidence: float` (0.0–1.0) in addition to `scores`
+- Two-stage evaluation pipeline: Stage 1 (`EVALUATION_STRICT_PROMPT`) produces strict scores + evidence + hiring_decision; Stage 2 (`_FEEDBACK_PROMPT`) produces coaching feedback (strengths/weaknesses/grammar) using Stage 1 scores as context
+- Stage 1 uses "START EVERY DIMENSION AT 1" mindset, mandatory score caps, concrete anchor rubric, evidence requirement (quote needed for score >= 8), internal consistency rules, and self-verification
+- `_evaluate_llm()` orchestrates both stages; `_generate_feedback()` returns None on failure (graceful fallback to empty feedback)
 - `get_evaluation_prompt()` and `get_question_prompt()` both accept a `UserProfile` with optional `interviewer_style` to inject style-specific persona
 - `scoring.calculate_question_score()` now accepts `question_type: str` for per-type weighted scoring; uses `TYPE_DIMENSION_WEIGHTS` dict
 - `llm_client.generate_follow_up()` creates adaptive follow-up questions; falls back to "Can you go deeper on that?"

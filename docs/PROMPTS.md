@@ -148,16 +148,34 @@ Each level has a tailored persona injected via `{seniority_persona}`:
 
 ## 2. Answer Evaluation
 
-**File:** `prompts.py` → `EVALUATION_PROMPT` — assembled from 5 reusable components:
-- `_EVALUATION_SYSTEM_PROMPT` (system instruction + question/answer/role placeholders + `{interviewer_style_persona}`)
-- `_EVALUATION_GENERAL_RULES` (anti-hallucination, buzzword penalty, fairness rules)
-- `_EVALUATION_RUBRIC` (1-10 scoring calibration)
-- `{type_dimensions}` (per-type dimension definitions, injected dynamically)
-- `_EVALUATION_FEEDBACK_INSTRUCTIONS` (strengths, weaknesses, grammar, reasons per dimension)
-- `_EVALUATION_OUTPUT_SCHEMA` (return format with `{type_output_fields}`)
+**File:** `prompts.py`
 
-**Builder:** `prompts.get_evaluation_prompt(question, answer, profile, question_type="open_ended")`
-**Used by:** `llm_client._evaluate_llm(question, answer, profile)` — dispatches to LLM only for free-response types (open_ended, behavioral, coding, debugging, system_design)
+### Two-Stage Pipeline
+
+`llm_client._evaluate_llm()` now uses two sequential LLM calls:
+
+**Stage 1 — Strict Scoring** (`EVALUATION_STRICT_PROMPT`):
+- `_EVALUATION_STRICT_SYSTEM_PROMPT` (gatekeeper framing: "You are NOT a tutor, coach, or mentor")
+- `_EVALUATION_GENERAL_RULES` (anti-generosity: "START EVERY DIMENSION AT 1", buzzword penalty)
+- `_EVALUATION_RUBRIC` (concrete anchor rubric: 10=STRONG HIRE … 1=STRONG NO HIRE)
+- `_MANDATORY_SCORE_CAPS` (hard rules: incorrect claim→correctness≤3, buzzwords→tech_depth≤4, etc.)
+- `_HIRING_DECISION_SECTION` (determine Strong Hire/Hire/Lean Hire/Lean No Hire/No Hire/Strong No Hire before scoring)
+- `_EVIDENCE_REQUIREMENT_SECTION` (score≥8 requires exact quote in `{dim}_evidence` field)
+- `_INTERNAL_CONSISTENCY_SECTION` (correctness≤3→no other dim exceeds 5, etc.)
+- `{type_dimensions}` (per-type dimension definitions)
+- `_STRICT_SELF_VERIFICATION` (6-point check before returning JSON)
+- `_EVALUATION_STRICT_OUTPUT_SCHEMA` (narrow JSON: scores + reasons + evidence + hiring_decision; no coaching)
+
+**Stage 2 — Feedback Generation** (`_FEEDBACK_PROMPT`):
+- Takes Stage 1 scores JSON as input
+- Produces only coaching output: strengths, weaknesses, grammar_correction, simplified_version, actionable_feedback
+- Returns `_FeedbackResponse`; if LLM fails, returns empty feedback gracefully
+
+**Builders:**
+- `prompts.get_strict_evaluation_prompt()` — builds Stage 1 prompt
+- `prompts.get_feedback_prompt(stage1_json)` — builds Stage 2 prompt
+
+**Dispatcher:** `evaluate_answer()` → calls `_evaluate_llm()` for free-response types, `_evaluate_objective()` for MCQ/Yes-No
 
 ### Per-type dimensions
 
@@ -177,30 +195,42 @@ Each level has a tailored persona injected via `{seniority_persona}`:
 
 ### Per-dimension score reasons
 
-Every dimension now includes a `{dim}_reason` field with a one-sentence rationale.
+Every dimension includes a `{dim}_reason` field with a one-sentence rationale.
+
+### Score evidence
+
+For every score ≥ 8, the LLM must include an exact quote in `{dim}_evidence`. If no quote exists, the score must be ≤ 6.
+
+### Hiring decision
+
+Every Stage 1 evaluation produces a `hiring_decision: str` — one of: Strong Hire, Hire, Lean Hire, Lean No Hire, No Hire, Strong No Hire.
 
 ### Confidence score
 
-Every evaluation includes `confidence: float` (0.0–1.0) indicating the LLM's certainty. Deterministic MCQ/Yes-No evaluations set confidence=1.0.
+Every evaluation includes `confidence: float` (0.0–1.0). Deterministic MCQ/Yes-No evaluations set confidence=1.0.
 
-### LLM output parsing
+### LLM output parsing (Stage 1 — strict)
 
-`_EvaluationResponse` uses `model_config = {"extra": "allow"}` to accept arbitrary fields. In `_evaluate_llm()`:
+`_StrictEvaluationResponse` uses `model_config = {"extra": "allow"}`. In `_evaluate_llm_strict()`:
 - `{dim}` fields → `scores` dict (clamped 1-10)
 - `{dim}_reason` fields → `score_reasons` dict
+- `{dim}_evidence` fields → `score_evidence` dict
+- `hiring_decision` → `hiring_decision` field
 - `confidence` → `confidence` field (clamped 0.0-1.0)
-- Known fields (strengths, weaknesses, grammar_correction, simplified_version, actionable_feedback) → direct attributes
 
-### Example output (open-ended)
+### Example output (open-ended) — Stage 1 (strict scoring)
 
 ```json
 {
   "clarity": 8,
   "clarity_reason": "Well-structured explanation with clear reasoning.",
+  "clarity_evidence": "I would first decompose the problem into three parts...",
   "completeness": 7,
   "completeness_reason": "Covered main points but omitted edge cases.",
+  "completeness_evidence": "No supporting evidence found.",
   "relevance": 9,
   "relevance_reason": "Directly addressed the question without digression.",
+  "relevance_evidence": "The answer focused entirely on the rate limiter design...",
   "correctness": 8,
   "correctness_reason": "Technically accurate with minor imprecision.",
   "technical_depth": 7,
@@ -209,58 +239,26 @@ Every evaluation includes `confidence: float` (0.0–1.0) indicating the LLM's c
   "problem_solving_reason": "Systematic approach to the problem.",
   "tradeoff_analysis": 6,
   "tradeoff_analysis_reason": "Mentioned alternatives but didn't compare trade-offs.",
-  "confidence": 0.85,
-  "strengths": ["Clear", "Structured", "Relevant"],
-  "weaknesses": ["Depth", "Trade-offs", "Grammar"],
+  "hiring_decision": "Lean Hire",
+  "confidence": 0.85
+}
+```
+
+### Example output — Stage 2 (feedback, separate call)
+
+```json
+{
+  "strengths": ["Clear structure", "Mentioned relevant technologies", "Showed systematic thinking"],
+  "weaknesses": ["Skipped edge cases", "Lacked failure mode analysis", "Grammar issues"],
   "grammar_correction": "Fixed grammar.",
   "simplified_version": "Simpler version.",
-  "actionable_feedback": "Be more specific."
+  "actionable_feedback": "Always discuss trade-offs when mentioning a technology."
+}
+```
 }
 ```
 
-### Example output (behavioral)
-
-```json
-{
-  "clarity": 8,
-  "clarity_reason": "Story was easy to follow.",
-  "completeness": 7,
-  "completeness_reason": "Covered STAR but omitted the Result.",
-  "relevance": 9,
-  "relevance_reason": "Focused on the question.",
-  "problem_solving": 7,
-  "problem_solving_reason": "Described the approach to resolving the situation.",
-  "ownership": 8,
-  "ownership_reason": "Took personal responsibility for the outcome.",
-  "reflection": 6,
-  "reflection_reason": "Limited self-awareness about what could have been done differently.",
-  "measurable_impact": 9,
-  "measurable_impact_reason": "Provided concrete numbers: reduced latency by 40%.",
-  "lessons_learned": 7,
-  "lessons_learned_reason": "Extracted actionable takeaways.",
-  "confidence": 0.9,
-  ...
-}
-```
-
-### Example output (coding)
-
-```json
-{
-  "correctness": 9,
-  "correctness_reason": "Algorithm handles all edge cases correctly.",
-  "solution_quality": 8,
-  "solution_quality_reason": "Clean code with appropriate abstractions.",
-  "technical_depth": 7,
-  "technical_depth_reason": "Good use of data structures but missed optimization opportunity.",
-  "problem_solving": 8,
-  "problem_solving_reason": "Systematic problem decomposition.",
-  "confidence": 0.88,
-  ...
-}
-```
-
-**Output schema:** `Evaluation` — `scores: dict[str, int]` (dynamic dimensions, validated 1-10), `score_reasons: dict[str, str]`, `confidence: float` (0.0-1.0).
+**Output schema:** `Evaluation` — `scores: dict[str, int]` (dynamic dimensions, validated 1-10), `score_reasons: dict[str, str]`, `score_evidence: dict[str, str]`, `hiring_decision: str`, `confidence: float` (0.0-1.0). Deterministic MCQ/Yes-No path bypasses the LLM entirely.
 
 ---
 
@@ -362,3 +360,4 @@ Return ONLY a valid JSON object:
 | 2026-07-22 | EVALUATION_PROMPT | Refactored into `_EVALUATION_SYSTEM_PROMPT`, `_EVALUATION_GENERAL_RULES`, `_EVALUATION_RUBRIC`, `_EVALUATION_FEEDBACK_INSTRUCTIONS`, `_EVALUATION_OUTPUT_SCHEMA`. Added anti-hallucination rule ("Evaluate only observable evidence"), concrete buzzword scoring rule (cap technical dim at 5/10). Behavioral guidance now requires ownership, reflection, measurable_impact, lessons_learned. Every output field now includes `{dim}_reason` and `confidence`. `{interviewer_style_persona}` added to system prompt. |
 | 2026-07-22 | QUESTION_GEN_PROMPT | Added `{interviewer_style_persona}` placeholder. Added `_SCENARIO_DIVERSITY_GUARD` to quality constraints (9 blocks total). |
 | 2026-07-22 | — | Added `INTERVIEWER_STYLE_PERSONAS` dict (faang, startup, gaming, finance, default). Added `FOLLOW_UP_PROMPT` template for adaptive follow-up questions. |
+| 2026-07-22 | EVALUATION_PROMPT | Replaced `_EVALUATION_GENERAL_RULES` with anti-generosity version (START EVERY DIMENSION AT 1). Replaced `_EVALUATION_RUBRIC` with concrete anchor rubric (Strong Hire … Strong No Hire). Added two-stage pipeline: `EVALUATION_STRICT_PROMPT` (strict scoring with mandatory caps, evidence requirement, hiring decision, internal consistency) and `_FEEDBACK_PROMPT` (coaching only). Added `_EVALUATION_STRICT_SYSTEM_PROMPT`, `_MANDATORY_SCORE_CAPS`, `_HIRING_DECISION_SECTION`, `_EVIDENCE_REQUIREMENT_SECTION`, `_INTERNAL_CONSISTENCY_SECTION`, `_STRICT_SELF_VERIFICATION`, `_EVALUATION_CALIBRATION_EXAMPLES`, `_EVALUATION_STRICT_OUTPUT_SCHEMA`. Added `Evaluation.score_evidence`, `Evaluation.hiring_decision` to schema. |
