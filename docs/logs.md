@@ -274,7 +274,8 @@
   3. **Rich rendering** — `_show_scorecard()` now renders 14 sections: header, assessment, readiness, stats table, question-by-question table, strongest/weakest competencies, recurring patterns, key concepts missed, radar chart with interpretation, learning roadmap, recommended resources
 - **Scorecard model:** expanded from 5 fields to 17: 9 LLM-generated (overall_assessment, hiring_recommendation, candidate_readiness, strongest_competencies, weakest_competencies, recurring_patterns, key_concepts_missed, learning_roadmap, learning_resources) + 8 deterministic (overall_score, grade, question_table, dimension_averages, stats, radar_interpretation, confidence_notice)
 - **LLM client:** `_ScorecardResponse` updated to 9 fields; `synthesize_scorecard()` merges LLM output with Python-computed stats; `_format_transcript()` kept for supplementary context
-- **Export:** `generate_markdown_transcript()` updated to use new Scorecard fields
+- **Export:** `generate_markdown_transcript()` updated to use new Scorecard fields; added `generate_scorecard_markdown()` for standalone assessment export
+- **Export button fixes:** Renamed buttons ("Download Transcript" for PDF, "Export Assessment" for Markdown); `export_md` callback wired to `generate_scorecard_markdown()`; timestamped filenames; `evaluate_answer()` and `synthesize_scorecard()` offloaded to `asyncio.to_thread`
 - **Tests:** fixed `conftest.py` Evaluation fixture (dict-based scores), updated `test_llm_client.py`, `test_export.py`, `test_schemas.py` to new Scorecard model
 - **Performance thresholds:** recalibrated — question gen 3s→6s, evaluation 3s→8s, scorecard synthesis 3s→25s (richer output)
 - **Test count:** 108 total (all green; 3 performance benchmarks)
@@ -292,3 +293,11 @@
 - **Test count:** 108 total (all green)
 - Updated `docs/logs.md`
 - **Status:** Phase 5 UI polish complete
+
+## Phase 5 — Export Assessment Crash Fix (2026-07-23)
+- **Export crash fixed:** `cl.File` for `.md` export was missing explicit `mime` — `filetype.guess()` returns `None` for `.md` files, and the Chainlit frontend crashes with "Cannot read properties of null (reading 'startsWith')" when `element.mime` is null.
+- **Fix:** Added `mime="text/markdown"` to the `cl.File` call. PDF export at line 226 was already fine since `filetype.guess()` correctly identifies `.pdf` as `application/pdf`.
+- **Commit:** `455b406`
+- **Test count:** 108 total (all green)
+- Updated `docs/bugs.md`, `docs/logs.md`
+- **Status:** Export crash resolved

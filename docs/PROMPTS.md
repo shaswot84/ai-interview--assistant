@@ -66,7 +66,7 @@ The `category` field now uses the `Competency` enum (defined in `schemas.py`) in
 | `leadership` | Behavioural |
 | `ownership` | Behavioural |
 
-### Default mode (no config, backward compatible)
+### Default mode (no config, backward compatible) — example output fields
 
 ```
 You are a senior hiring manager at a {industry} company.
@@ -166,16 +166,17 @@ Each level has a tailored persona injected via `{seniority_persona}`:
 - `_STRICT_SELF_VERIFICATION` (6-point check before returning JSON)
 - `_EVALUATION_STRICT_OUTPUT_SCHEMA` (narrow JSON: scores + reasons + evidence + hiring_decision; no coaching)
 
-**Stage 2 — Feedback Generation** (`_FEEDBACK_PROMPT`):
-- Takes Stage 1 scores JSON as input
-- Produces only coaching output: strengths, weaknesses, grammar_correction, simplified_version, actionable_feedback
-- Returns `_FeedbackResponse`; if LLM fails, returns empty feedback gracefully
+**Stage 2 — Feedback Generation** (dispatched by `QuestionType`):
+- **Non-coding types** (`_FEEDBACK_PROMPT`): produces strengths, weaknesses, grammar_correction, simplified_version, actionable_feedback
+- **Coding/debugging types** (`_FEEDBACK_CODE_PROMPT`): produces strengths, weaknesses, code_fix (corrected code with comments), code_review (textual review), actionable_feedback
 
 **Builders:**
 - `prompts.get_strict_evaluation_prompt()` — builds Stage 1 prompt
-- `prompts.get_feedback_prompt(stage1_json)` — builds Stage 2 prompt
+- `prompts.get_feedback_prompt(stage1_json)` — builds Stage 2 prompt for non-coding types
+- `prompts.get_feedback_code_prompt(stage1_json)` — builds Stage 2 prompt for coding/debugging types
 
 **Dispatcher:** `evaluate_answer()` → calls `_evaluate_llm()` for free-response types, `_evaluate_objective()` for MCQ/Yes-No
+- Inside `_evaluate_llm()`, `_generate_feedback()` dispatches on `QuestionType.CODING`/`DEBUGGING` to use code prompt vs general prompt
 
 ### Per-type dimensions
 
@@ -244,7 +245,7 @@ Every evaluation includes `confidence: float` (0.0–1.0). Deterministic MCQ/Yes
 }
 ```
 
-### Example output — Stage 2 (feedback, separate call)
+### Example output — Stage 2 (feedback) for non-coding types
 
 ```json
 {
@@ -255,10 +256,20 @@ Every evaluation includes `confidence: float` (0.0–1.0). Deterministic MCQ/Yes
   "actionable_feedback": "Always discuss trade-offs when mentioning a technology."
 }
 ```
+
+### Example output — Stage 2 (feedback) for coding/debugging types
+
+```json
+{
+  "strengths": ["Correctly identified the race condition", "Used proper synchronization", "Clean code structure"],
+  "weaknesses": ["Missed exception handling", "No consideration for deadlock", "Lacked test coverage"],
+  "code_fix": "def safe_increment(counter):\n    # Using lock to prevent race condition\n    with counter.lock:\n        counter.value += 1\n    return counter.value",
+  "code_review": "The solution uses a lock correctly, but doesn't handle the case where the lock acquisition itself could raise an exception. Consider using a try-finally block to ensure the lock is always released.",
+  "actionable_feedback": "Always consider edge cases like concurrent access patterns and resource cleanup when writing multithreaded code."
 }
 ```
 
-**Output schema:** `Evaluation` — `scores: dict[str, int]` (dynamic dimensions, validated 1-10), `score_reasons: dict[str, str]`, `score_evidence: dict[str, str]`, `hiring_decision: str`, `confidence: float` (0.0-1.0). Deterministic MCQ/Yes-No path bypasses the LLM entirely.
+**Output schema:** `Evaluation` — `scores: dict[str, int]` (dynamic dimensions, validated 1-10), `score_reasons: dict[str, str]`, `score_evidence: dict[str, str]`, `hiring_decision: str`, `confidence: float` (0.0-1.0), plus coaching fields: `strengths`, `weaknesses`, `grammar_correction`, `simplified_version`, `code_fix` (optional), `code_review` (optional), `actionable_feedback`. Deterministic MCQ/Yes-No path bypasses the LLM entirely.
 
 ---
 
@@ -341,6 +352,41 @@ Return ONLY a valid JSON object:
 
 ---
 
+## 6. Code Feedback Prompt (Coding/Debugging)
+
+**File:** `prompts.py` → `_FEEDBACK_CODE_PROMPT`
+**Builder:** `prompts.get_feedback_code_prompt(stage1_json)`
+**Used by:** `_generate_feedback()` when `question_type` is CODING or DEBUGGING
+
+```
+You are a helpful coding interview coach. Based on the evaluation below, generate coaching output for a coding answer.
+
+Evaluation:
+{stage1_json}
+
+Provide:
+- strengths: Exactly THREE concise strengths about the code
+- weaknesses: Exactly THREE concise weaknesses about the code
+- code_fix: Provide a corrected version of the candidate's code with comments explaining each fix. Use proper indentation and syntax.
+- code_review: A short paragraph explaining the main issues and how to improve the solution.
+- actionable_feedback: Provide specific advice explaining WHAT is missing and HOW to improve.
+
+Return ONLY a valid JSON object with this structure:
+{
+  "strengths": ["...", "...", "..."],
+  "weaknesses": ["...", "...", "..."],
+  "code_fix": "def solve(nums):\n    # corrected implementation\n    ...",
+  "code_review": "...",
+  "actionable_feedback": "..."
+}
+
+Do not use Markdown. Do not include any additional text.
+```
+
+**Output schema:** `_FeedbackResponse` — includes `code_fix: str`, `code_review: str` alongside `strengths`, `weaknesses`, `actionable_feedback`. `grammar_correction` and `simplified_version` remain empty for coding/debugging questions.
+
+---
+
 ## Prompt Change Log
 
 | Date | Prompt | Change |
@@ -349,15 +395,14 @@ Return ONLY a valid JSON object:
 | 2026-07-19 | EVALUATION_PROMPT | Added `INJECTION_GUARD` and score clamping (1-10) |
 | 2026-07-20 | QUESTION_GEN_PROMPT | Switched to hiring-manager framing with `{seniority_persona}`, added `difficulty` and `expected_keywords` to output schema |
 | 2026-07-20 | — | Added `SENIORITY_PERSONAS` dict and `get_question_prompt()` builder function |
-| 2026-07-21 | QUESTION_GEN_PROMPT | Added `{distribution_instructions}` and `{question_type_example}` placeholders for dynamic type distribution; added `get_question_prompt(profile, config)` overload |
-| 2026-07-21 | — | Added `QUESTION_TYPE_DESCRIPTIONS` dict and `QUESTION_TYPE_DISTRIBUTION_TEMPLATE` for per-type field requirements |
-| 2026-07-21 | EVALUATION_PROMPT | Replaced simple 5-dimension scoring with seniority-aware 9-dimension evaluation (5 communication + 4 technical), added scoring calibration (1-10 rubric), seniority-specific technical expectations (Junior/Senior/Lead), and explicit technical dimension scoring (technical_depth, architecture_design, problem_solving, tradeoff_analysis) |
+| 2026-07-21 | QUESTION_GEN_PROMPT | Added `{distribution_instructions}` and `{question_type_example}` placeholders for dynamic type distribution |
+| 2026-07-21 | — | Added `QUESTION_TYPE_DESCRIPTIONS` dict and `QUESTION_TYPE_DISTRIBUTION_TEMPLATE` |
+| 2026-07-21 | EVALUATION_PROMPT | Replaced simple 5-dimension with seniority-aware 9-dimension evaluation |
 | 2026-07-21 | — | Added `EVALUATION_PERSONAS` with detailed scoring rubrics per seniority level |
-| 2026-07-22 | EVALUATION_PROMPT | Complete rewrite: added `question_type` placeholder, `QUESTION_TYPE_GUIDANCE` dict, `TYPE_DIMENSIONS` dict (per-type dimension sets), `TYPE_OUTPUT_FIELDS` dict (per-type JSON format). Removed `grammar`, `impact`, `architecture_design` dimensions. Added `correctness` and `solution_quality`. `get_evaluation_prompt()` now takes a `question_type` parameter. LLM returns only dimensions relevant to the question type. |
-| 2026-07-22 | — | MCQ/Yes/No moved to deterministic `_evaluate_objective()` — no longer uses LLM prompt. Returns single `correctness` dimension. |
-| 2026-07-22 | QUESTION_GEN_PROMPT | Added 8 quality constraint blocks (`{quality_constraints}`): COMPETENCY COVERAGE, PROGRESSIVE DIFFICULTY, INDUSTRY CONTEXT, AVOID CLICHÉS, BAN TRIVIA, QUESTION QUALITY CHECKLIST, EXPECTED KEYWORDS, SELF-VERIFICATION. `category` field now uses `Competency` enum (specific competencies like `problem_solving`, `api_design`) instead of `technical|behavioural`. |
-| 2026-07-22 | EVALUATION_PROMPT | Refactored into `_EVALUATION_SYSTEM_PROMPT`, `_EVALUATION_GENERAL_RULES`, `_EVALUATION_RUBRIC`, `_EVALUATION_FEEDBACK_INSTRUCTIONS`, `_EVALUATION_OUTPUT_SCHEMA`. Added anti-hallucination rule ("Evaluate only observable evidence"), concrete buzzword scoring rule (cap technical dim at 5/10). Behavioral guidance now requires ownership, reflection, measurable_impact, lessons_learned. Every output field now includes `{dim}_reason` and `confidence`. `{interviewer_style_persona}` added to system prompt. |
-| 2026-07-22 | QUESTION_GEN_PROMPT | Added `{interviewer_style_persona}` placeholder. Added `_SCENARIO_DIVERSITY_GUARD` to quality constraints (9 blocks total). |
-| 2026-07-22 | — | Added `INTERVIEWER_STYLE_PERSONAS` dict (faang, startup, gaming, finance, default). Added `FOLLOW_UP_PROMPT` template for adaptive follow-up questions. |
-| 2026-07-22 | EVALUATION_PROMPT | Replaced `_EVALUATION_GENERAL_RULES` with anti-generosity version (START EVERY DIMENSION AT 1). Replaced `_EVALUATION_RUBRIC` with concrete anchor rubric (Strong Hire … Strong No Hire). Added two-stage pipeline: `EVALUATION_STRICT_PROMPT` (strict scoring with mandatory caps, evidence requirement, hiring decision, internal consistency) and `_FEEDBACK_PROMPT` (coaching only). Added `_EVALUATION_STRICT_SYSTEM_PROMPT`, `_MANDATORY_SCORE_CAPS`, `_HIRING_DECISION_SECTION`, `_EVIDENCE_REQUIREMENT_SECTION`, `_INTERNAL_CONSISTENCY_SECTION`, `_STRICT_SELF_VERIFICATION`, `_EVALUATION_CALIBRATION_EXAMPLES`, `_EVALUATION_STRICT_OUTPUT_SCHEMA`. Added `Evaluation.score_evidence`, `Evaluation.hiring_decision` to schema. |
-| 2026-07-23 | SCORECARD_PROMPT | Complete redesign — replaced flat 5-field prompt (strengths, improvements, model_answer, overall_assessment, grade) with structured-data 9-section prompt. Accepts `{evaluation_json}` (per-question structured data) as primary input, `{transcript}` as supplementary. Produces `_ScorecardResponse` with 9 fields. Deterministic fields (overall_score, grade, question_table, dimension_averages, stats, radar_interpretation, confidence_notice) are computed in Python and merged into the 17-field `Scorecard`. Added `_build_evaluation_json()` in `llm_client.py` to construct the structured input. |
+| 2026-07-22 | EVALUATION_PROMPT | Complete rewrite: per-type dimension sets (`TYPE_DIMENSIONS`, `TYPE_OUTPUT_FIELDS`, `QUESTION_TYPE_GUIDANCE`). Removed fixed fields. |
+| 2026-07-22 | — | MCQ/Yes/No moved to deterministic `_evaluate_objective()` |
+| 2026-07-22 | QUESTION_GEN_PROMPT | Added 8 quality constraint blocks (`{quality_constraints}`) |
+| 2026-07-22 | EVALUATION_PROMPT | Refactored into two-stage pipeline: `EVALUATION_STRICT_PROMPT` (strict scoring) + `_FEEDBACK_PROMPT` (coaching). Added anti-generosity rules, evidence requirement, internal consistency. |
+| 2026-07-22 | — | Added `INTERVIEWER_STYLE_PERSONAS` dict. Added `FOLLOW_UP_PROMPT`. |
+| 2026-07-23 | SCORECARD_PROMPT | Complete redesign — replaced flat 5-field prompt with structured-data 9-section prompt. Accepts `{evaluation_json}` as primary input. |
+| 2026-07-23 | — | Added `_FEEDBACK_CODE_PROMPT` for coding/debugging questions — produces `code_fix` + `code_review` instead of `grammar_correction`/`simplified_version`. Added `get_feedback_code_prompt()` builder. |

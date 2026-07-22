@@ -5,7 +5,7 @@ Personalised mock interview app powered by an OpenAI-compatible LLM. Built with 
 
 ## Stack
 - **Python 3.11** | **uv** (package manager)
-- **Chainlit** (UI framework)
+- **Chainlit 2.11** (UI framework)
 - **OpenAI SDK** (works with OpenAI, Groq, DeepSeek, Ollama, etc.)
 - **Pydantic v2** (schemas/validation)
 - **Plotly** (radar chart)
@@ -26,21 +26,25 @@ Personalised mock interview app powered by an OpenAI-compatible LLM. Built with 
 - Question generation uses 9 quality constraint blocks (includes scenario diversity guard)
 - `Question.category` uses the `Competency` enum (specific competencies like `problem_solving`, `api_design`) — not the generic `QuestionCategory`
 - `Evaluation` has `score_reasons: dict[str, str]`, `score_evidence: dict[str, str]`, `hiring_decision: str`, and `confidence: float` (0.0–1.0) in addition to `scores`
-- Two-stage evaluation pipeline: Stage 1 (`EVALUATION_STRICT_PROMPT`) produces strict scores + evidence + hiring_decision; Stage 2 (`_FEEDBACK_PROMPT`) produces coaching feedback (strengths/weaknesses/grammar) using Stage 1 scores as context
+- Two-stage evaluation pipeline: Stage 1 (`EVALUATION_STRICT_PROMPT`) produces strict scores + evidence + hiring_decision; Stage 2 (`_FEEDBACK_PROMPT` or `_FEEDBACK_CODE_PROMPT`) produces coaching feedback using Stage 1 scores as context
 - Stage 1 uses "START EVERY DIMENSION AT 1" mindset, mandatory score caps, concrete anchor rubric, evidence requirement (quote needed for score >= 8), internal consistency rules, and self-verification
-- `_evaluate_llm()` orchestrates both stages; `_generate_feedback()` returns None on failure (graceful fallback to empty feedback)
+- `_evaluate_llm()` orchestrates both stages; `_generate_feedback()` dispatches on `QuestionType.CODING`/`DEBUGGING` to use `_FEEDBACK_CODE_PROMPT` (returns `code_fix`/`code_review`) vs `_FEEDBACK_PROMPT` (returns `grammar_correction`/`simplified_version`); returns None on failure (graceful fallback to empty feedback)
 - `get_evaluation_prompt()` and `get_question_prompt()` both accept a `UserProfile` with optional `interviewer_style` to inject style-specific persona
-- `scoring.calculate_question_score()` now accepts `question_type: str` for per-type weighted scoring; uses `TYPE_DIMENSION_WEIGHTS` dict
+- `scoring.calculate_question_score()` accepts `question_type: str` for per-type weighted scoring; uses `TYPE_DIMENSION_WEIGHTS` dict
 - `llm_client.generate_follow_up()` creates adaptive follow-up questions; falls back to "Can you go deeper on that?"
 - `UserProfile` has optional `interviewer_style: InterviewerStyle` (default: DEFAULT)
 - `Scorecard` has 17 fields: 9 LLM-generated (overall_assessment, hiring_recommendation, candidate_readiness, strongest_competencies, weakest_competencies, recurring_patterns, key_concepts_missed, learning_roadmap, learning_resources) + 8 deterministic Python-computed fields
 - `synthesize_scorecard()` uses structured `_build_evaluation_json()` as primary LLM input; deterministic stats from `scoring.py` are merged into the Scorecard after the LLM call
 - `scoring.py` has 6 deterministic stat functions: `compute_interview_stats`, `compute_strongest_weakest_dimensions`, `compute_question_table`, `interpret_radar_chart`, `compute_confidence_notice`, `_compute_highest_lowest`
 - `_ScorecardResponse` in `llm_client.py` covers only the LLM-generated subset (9 fields); deterministic fields are filled in Python
-- `_question_badge_html()` renders colored type + category badges on every question (CODING, BEHAVIORAL, MCQ, etc.)
-- MCQ options are echoed as a permanent message after selection; empty MCQ options fall back to open-ended with a log warning
-- `_FEEDBACK_CODE_PROMPT` generates `code_fix` + `code_review` for coding/debugging questions instead of grammar/simplified; `_generate_feedback()` dispatches on `QuestionType`
-- Coding/debugging answers get a backtick-guidance prompt; surrounding ``` fences are stripped
+- `_question_badge_html()` renders colored type + category badges on every question (CODING, BEHAVIORAL, MCQ, YES/NO, DEBUGGING, SYSTEM DESIGN)
+- MCQ options are echoed as a permanent `cl.Message` after selection; empty MCQ options (< 2) fall back to open-ended with a log warning
+- MCQ/Yes-No answers are echoed as a permanent `cl.Message` (`**Your answer:** {text}`) so the selection stays visible after `AskActionMessage` consumption
+- `_FEEDBACK_CODE_PROMPT` generates `code_fix` + `code_review` for coding/debugging questions instead of `grammar_correction`/`simplified_version`; `_generate_feedback()` dispatches on `QuestionType.CODING` or `DEBUGGING`
+- Coding/debugging answers get a backtick-guidance `AskUserMessage` prompt; surrounding triple-backtick fences are stripped with regex before submission
+- Code/debugging questions render starter/buggy code with styled labels (`📄 Starter Code (lang)` / `🐛 Buggy Code`)
+- `cl.File` for `.md` exports must set `mime="text/markdown"` explicitly — `filetype.guess()` cannot identify `.md` files, causing Chainlit frontend crash (`Cannot read properties of null (reading 'startsWith')`)
+- `Evaluation` has optional `code_fix` and `code_review` fields (backward-compatible) used only for coding/debugging questions
 
 ## State Machine
 ```

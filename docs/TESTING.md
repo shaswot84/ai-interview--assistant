@@ -16,9 +16,9 @@ uv run pytest -k "test_name" -v      # Single test
 | `test_state_machine.py` | Valid/invalid transitions, timer auto-skip, edge cases | 1 |
 | `test_schemas.py` | Pydantic validation (invalid seniority, out-of-bounds scores) | 1 |
 | `test_providers.py` | OpenAI client returns valid JSON | 2 |
-| `test_llm_client.py` | Question generation, fallback, evaluation, deterministic dispatch, MCQ/Yes/No scoring | 2 + 5 |
+| `test_llm_client.py` | Question generation, fallback, evaluation, deterministic dispatch, MCQ/Yes/No scoring, code feedback dispatch | 2 + 5 |
 | `test_scoring.py` | Weighted scores, overall average, letter grades, radar data, deterministic stats (interview stats, strongest/weakest dims, question table, radar interpretation, confidence notice) | 3 + 5 |
-| `test_export.py` | Markdown format, PDF file creation | 3 |
+| `test_export.py` | Markdown format, PDF file creation, scorecard markdown export | 3 + 5 |
 | `test_edge_cases.py` | Injection resistance, score clamping, retry exhaustion, malformed JSON, RateLimitError, session isolation, all-skipped, fallback ratio | 4 + 5 |
 | `test_performance.py` | Latency targets (6s question gen, 8s evaluation, 25s scorecard); skipped without API key | 5 |
 | `test_industry_guardrail.py` | Industry classification (valid, invalid, backend engineer, missing API key, empty response, malformed JSON, extra text) | 5 |
@@ -27,9 +27,9 @@ uv run pytest -k "test_name" -v      # Single test
 - All state machine transitions covered (valid + invalid)
 - Timer: zero start, running, expired
 - Schemas: valid data passes, invalid data rejected
-- LLM: success path, retry path, fallback path, injection path
+- LLM: success path, retry path, fallback path, injection path, type-aware feedback dispatch (code vs general)
 - Scoring: equal-weighted average, multi-dimension mixing, grade boundaries, deterministic stats functions (interview_stats, strongest_weakest_dims, question_table with performance labels, radar_interpretation, confidence_notice)
-- Export: file created, content well-formed
+- Export: file created, content well-formed, scorecard markdown export
 - Deterministic evaluation: MCQ correct/wrong, Yes/No, case-insensitive, null answer
 - Edge cases: out-of-range scores clamped, null LLM content handled, retry exhaustion raises, fallback question ratio correct, RateLimitError caught, session isolation
 - Performance: latency targets (6s question gen, 8s evaluation, 25s scorecard) when API key is available
@@ -37,7 +37,7 @@ uv run pytest -k "test_name" -v      # Single test
 ## Conftest Fixtures
 - `sample_profile` — standard UserProfile (Senior, Backend Engineer, FinTech)
 - `sample_questions` — list[Question] with 5 items (3 tech, 2 behavioural)
-- `sample_evaluation` — Evaluation with mid-range scores
+- `sample_evaluation` — Evaluation with mid-range scores (dict-based `scores`)
 - `sample_state` — SessionState with profile, questions, transcript (2 answered, 2 skipped, 1 None)
 
 ## Golden Test Cases
@@ -56,6 +56,8 @@ uv run pytest -k "test_name" -v      # Single test
 | MCQ wrong | answer="5", correct_answer="4" | `scores["correctness"] == 1` |
 | MCQ case-insensitive | answer="rest", correct_answer="REST" | `scores["correctness"] == 10` |
 | Dynamic scores | Different question types | Only relevant dimensions present in `scores` dict |
+| Code feedback dispatch | `question_type == CODING` | Uses `_FEEDBACK_CODE_PROMPT`, returns `code_fix`/`code_review` |
+| Grammar feedback for non-code | `question_type == OPEN_ENDED` | Uses `_FEEDBACK_PROMPT`, returns `grammar_correction`/`simplified_version` |
 
 ## Known Flaky Tests
 - `test_performance.py`: API latency can cause occasional failures if the LLM provider is slow; thresholds are calibrated for typical Groq response times (6s / 8s / 25s).

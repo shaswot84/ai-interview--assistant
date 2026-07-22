@@ -26,7 +26,7 @@
 
 ## ADR-004: Weighted Scoring Formula
 **Date:** 2026-07-19
-**Status:** Accepted
+**Status:** Accepted (superseded by ADR-012)
 **Context:** Need to produce a single per-question score from multiple evaluation dimensions.
 **Decision:** Weighted average: clarity 0.15, completeness 0.25, relevance 0.20, grammar 0.10, impact 0.30.
 **Rationale:** Impact and completeness are the strongest signals of interview performance. Grammar is least important.
@@ -90,7 +90,7 @@
 
 ## ADR-012: Dynamic Per-Type Evaluation Dimensions
 **Date:** 2026-07-22
-**Status:** Accepted
+**Status:** Accepted. Supersedes ADR-004 (fixed weights).
 **Context:** The original evaluator returned the same 9 dimensions (clarity, completeness, relevance, grammar, impact, technical_depth, architecture_design, problem_solving, tradeoff_analysis) for every question type. This made no sense for MCQ (a simple correct/incorrect check), coding questions (no "architecture_design" or "grammar"), or Yes/No questions.
 **Decision:** Replace the fixed 9-field `Evaluation` schema with `scores: dict[str, int]` — each question type defines its own set of relevant dimensions. MCQ/Yes/No use deterministic `_evaluate_objective()` returning just `correctness`. LLM-evaluated types (open_ended, behavioral, coding, debugging, system_design) each have their own dimension set defined in `TYPE_DIMENSIONS`. The LLM prompt lists only the relevant dimensions for that type.
 **Rationale:** Dynamic dimensions eliminate nonsensical scores (e.g. "architecture_design: 10" for "Is Python dynamically typed?"). Each question type is evaluated on criteria that actually measure what the question is designed to assess. Deterministic evaluation for objective types removes LLM cost and latency.
@@ -103,3 +103,19 @@
 **Decision:** Use a separate Ollama endpoint for both `validate_role()` and `validate_industry()`. The Ollama client (`get_ollama_client()` in `providers.py`) is an OpenAI-compatible client configured via `OLLAMA_API_KEY`, `OLLAMA_BASE_URL`, and `OLLAMA_MODEL`. Both guardrails call Ollama with `temperature=0` but omit `response_format={"type": "json_object"}` (Ollama's `/v1/chat/completions` endpoint does not support it). Instead they use a two-stage parser — strict `json.loads` first, then a regex fallback for `"is_valid": true|false` — to handle models that return freeform text around the JSON object.
 **Rationale:** Ollama can run locally (zero cost, zero quota) or via a hosted OpenAI-compatible endpoint. Decoupling onboarding classifiers from the main LLM provider avoids rate-limit contention and lets each provider be configured independently.
 **Consequences:** Two separate LLM endpoints to maintain. If Ollama is unreachable, `validate_role()` falls back to `True` (allow) and `validate_industry()` raises `RuntimeError` (caught by the onboarding loop for a retry prompt).
+
+## ADR-014: Type-Aware Feedback for Coding/Debugging Questions
+**Date:** 2026-07-23
+**Status:** Accepted
+**Context:** The two-stage evaluation pipeline used the same `_FEEDBACK_PROMPT` for all question types, producing `grammar_correction` and `simplified_version`. For coding/debugging questions, candidates need code review and corrected code, not grammar fixes or simplified prose.
+**Decision:** Add `_FEEDBACK_CODE_PROMPT` that generates `code_fix` (corrected code with comments) and `code_review` (textual review) for coding/debugging questions. `_generate_feedback()` dispatches on `QuestionType.CODING`/`DEBUGGING`. The `Evaluation` schema gets optional `code_fix`/`code_review` fields (backward-compatible). `_show_feedback()` conditionally renders code review/fix vs grammar/simplified.
+**Rationale:** Code feedback is fundamentally different from prose feedback — showing a corrected code block with line-by-line comments is far more useful for coding practice than a grammar correction. A single set of Stage 2 fields would waste LLM tokens generating irrelevant content for each question type.
+**Consequences:** The `_FeedbackResponse` Pydantic model now has 4 optional fields (`code_fix`, `code_review`) alongside the original 2 (`grammar_correction`, `simplified_version`). The `Evaluation` schema also has matching optional fields. Only the relevant pair is populated per question type.
+
+## ADR-015: Backtick Guidance + Fence Stripping for Code Answers
+**Date:** 2026-07-23
+**Status:** Accepted
+**Context:** Users pasting code into `AskUserMessage` naturally wrap it in triple backticks for formatting. This raw text (with fences) gets stored in the transcript and fed to the LLM evaluator, which then has to handle the extra formatting noise.
+**Decision:** Show a backtick-guidance prompt for coding/debugging answers. After submission, strip surrounding triple-backtick fences with regex before storing in the transcript. The guidance text suggests wrapping in backticks with language specification (e.g., \`\`\`python).
+**Rationale:** Storing raw code without fences produces cleaner transcript output, reduces LLM evaluation confusion, and makes export Markdown cleaner. The guidance prompt ensures users know how to format their code.
+**Consequences:** If a user's answer genuinely begins or ends with triple backticks (not as fence markers), those will be incorrectly stripped. This is an acceptable edge case for the coding interview context.

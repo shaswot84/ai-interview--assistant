@@ -34,6 +34,12 @@
 - Wrap the call with `await asyncio.to_thread(your_sync_fn, arg1, arg2)` to offload it to a thread pool
 - Example: `questions = await asyncio.to_thread(generate_questions, state.profile)`
 
+### Export Assessment button crashes with JavaScript error
+- This is a known issue: `Cannot read properties of null (reading 'startsWith')` when clicking "Export Assessment"
+- **Root cause:** The Chainlit frontend does `element.mime.startsWith(...)` without a null guard. `filetype.guess()` cannot identify `.md` files, so `mime` is `None` for Markdown file elements.
+- **Fix applied:** `mime="text/markdown"` is now explicitly set on `cl.File` for `.md` exports. PDF export was always fine because `filetype` identifies `.pdf` as `application/pdf`.
+- If you see this error again, run `git log` to confirm the fix is present; if not, add `mime="text/markdown"` to the `cl.File(path=..., name=..., mime="text/markdown")` call in `on_export_md()`.
+
 ## Provider Quirks
 
 ### Groq
@@ -81,6 +87,12 @@
 - API key: configurable via `OLLAMA_API_KEY`; local Ollama may accept any non-empty string
 - Key format: depends on the endpoint provider
 - **Known limitation:** Ollama's `/v1/chat/completions` endpoint does **not** support the `response_format={"type": "json_object"}` parameter. The guardrails (`validate_role`, `validate_industry`) omit this parameter and instead use a two-stage parser (strict JSON → regex fallback) to handle models that return freeform text around the JSON object.
+
+### MCQ question shows no buttons / stuck on "Choose your answer"
+- The question was generated with empty or insufficient `options` (< 2 entries)
+- The app now logs a warning and falls back to open-ended text input when this happens
+- If you see this, it's a question-generation quality issue — the LLM produced an MCQ without proper options
+- No action needed; the app gracefully handles it by switching to text input
 
 ## Debugging Tips
 - Set `QUESTION_TIMER_SECONDS=9999` during development to prevent timeouts

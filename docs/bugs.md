@@ -7,7 +7,7 @@
 **File:** `app.py` (all `cl.Action(...)` calls)  
 **Symptom:** `ValidationError: payload Field required` on startup  
 **Root cause:** Chainlit 2.x requires a `payload: Dict` field in `Action`. The old 1.x API used `value=` instead.  
-**Fix:** Replaced `value="xxx"` with `payload={}` in every `cl.Action(...)` call.  
+**Fix:** Replaced `value="xxx"` with `payload={}` in every `cl.Action(...)` call. 
 
 ---
 
@@ -149,3 +149,25 @@
 **Symptom:** After clicking any button (MCQ option, Skip, etc.), all subsequent action buttons on both question and feedback messages become disabled and unclickable.
 **Root cause:** Chainlit's built-in mechanism disables `cl.Action` buttons once the conversation progresses past the message that owns them. With the previous approach (separate `cl.Message` + registered `@cl.action_callback` handlers), any new message from the assistant would cause all prior action buttons to become invalid. The feedback action name rename (bug #15) only fixed duplicate-name collisions within the same message, not the cross-message disable behavior.
 **Fix:** Replaced all question and feedback action buttons with `cl.AskActionMessage` — a blocking action message that prevents the UI thread from progressing until the user clicks a button. This bypasses Chainlit's automatic disable mechanism because the conversation cannot advance past the AskActionMessage until an action is taken. Question content is sent as a permanent `cl.Message` (remains visible), then a separate `AskActionMessage` carries only the interactive buttons. Feedback also uses `AskActionMessage` with inline handling (no `@cl.action_callback` registration needed).
+
+---
+
+## 2026-07-23
+
+### 17. Export Assessment crashes: `Cannot read properties of null (reading 'startsWith')`
+
+**File:** `app.py:238` — `on_export_md()`
+**Symptom:** Clicking "Export Assessment" on the scorecard shows a JavaScript error and the file is not sent.
+**Root cause:** `cl.File` doesn't set `mime` by default. `filetype.guess()` correctly identifies `.pdf` files (setting `application/pdf`), but returns `None` for `.md` files (plain text). The Chainlit frontend does `element.mime.startsWith(...)` without a null guard — when `mime` is `None`, it crashes.
+**Fix:** Added `mime="text/markdown"` to the `cl.File` call for assessment export. The PDF export at `app.py:226` already worked because `filetype` identifies `.pdf` natively.
+**Commit:** `455b406`
+
+---
+
+### 18. MCQ with empty options renders blank buttons
+
+**File:** `app.py:356-393` — `_show_question()` MCQ branch
+**Symptom:** An MCQ question with `options=[]` or a single option shows a blank "Choose your answer:" prompt with no clickable choices — the user is stuck.
+**Root cause:** The MCQ branch iterated `q.options` unconditionally to build action buttons. With fewer than 2 options, no buttons were rendered and the `AskActionMessage` had no way to proceed.
+**Fix:** Added a guard: if `len(q.options) < 2`, log a warning and fall through to the open-ended handler (AskUserMessage with text input). This is safe because the LLM-generated fallback path won't deadlock the user.
+**Commit:** `89dc215`
