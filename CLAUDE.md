@@ -23,8 +23,14 @@ Personalised mock interview app powered by an OpenAI-compatible LLM. Built with 
 - Ollama guardrails use a two-stage parser (JSON → regex fallback) — do **not** add `response_format` for Ollama calls
 - Feedback content is sent as a permanent `cl.Message`; action buttons are in a separate `AskActionMessage` — never bundle content and actions in a single `AskActionMessage`
 - "End Early" button is hidden on the last question (check `is_last`) in both `_show_question()` and `_show_feedback()`
-- Question generation uses 8 quality constraint blocks: competency coverage, progressive difficulty, industry context, cliché guard, trivia guard, quality checklist, expected keywords guide, self-verification
+- Question generation uses 9 quality constraint blocks (includes scenario diversity guard)
 - `Question.category` uses the `Competency` enum (specific competencies like `problem_solving`, `api_design`) — not the generic `QuestionCategory`
+- `Evaluation` has `score_reasons: dict[str, str]` and `confidence: float` (0.0–1.0) in addition to `scores`
+- EVALUATION_PROMPT is assembled from 5 reusable components: system prompt, general rules, rubric, feedback instructions, output schema
+- `get_evaluation_prompt()` and `get_question_prompt()` both accept a `UserProfile` with optional `interviewer_style` to inject style-specific persona
+- `scoring.calculate_question_score()` now accepts `question_type: str` for per-type weighted scoring; uses `TYPE_DIMENSION_WEIGHTS` dict
+- `llm_client.generate_follow_up()` creates adaptive follow-up questions; falls back to "Can you go deeper on that?"
+- `UserProfile` has optional `interviewer_style: InterviewerStyle` (default: DEFAULT)
 
 ## State Machine
 ```

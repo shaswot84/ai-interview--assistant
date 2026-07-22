@@ -6,10 +6,12 @@ import pytest
 
 from llm_client import (
     _EvaluationResponse,
+    _FollowUpResponse,
     _ScorecardResponse,
     QuestionsResponse,
     _call_with_retry,
     evaluate_answer,
+    generate_follow_up,
     generate_questions,
     synthesize_scorecard,
 )
@@ -188,17 +190,24 @@ class TestEvaluateAnswer:
             actionable_feedback="More detail.",
             # Extra fields → dimension scores
             clarity=8,
+            clarity_reason="Explained concepts clearly but missed details.",
             completeness=7,
+            completeness_reason="Covered main points but omitted edge cases.",
             relevance=9,
             correctness=8,
             technical_depth=7,
             problem_solving=8,
             tradeoff_analysis=6,
+            # Confidence
+            confidence=0.85,
         )
         result = evaluate_answer(A_QUESTION, "My answer", A_PROFILE)
         assert isinstance(result, Evaluation)
         assert result.scores["clarity"] == 8
         assert result.scores["technical_depth"] == 7
+        assert result.score_reasons["clarity_reason"] == "Explained concepts clearly but missed details."
+        assert result.score_reasons["completeness_reason"] == "Covered main points but omitted edge cases."
+        assert result.confidence == 0.85
         assert result.strengths == ["Clear", "Structured", "Relevant"]
 
 
@@ -283,3 +292,38 @@ class TestSynthesizeScorecard:
         state = SessionState()
         with pytest.raises(ValueError, match="Cannot synthesize scorecard without a profile"):
             synthesize_scorecard(state)
+
+
+class TestGenerateFollowUp:
+    """generate_follow_up — validates follow-up question generation."""
+
+    @patch("llm_client._call_with_retry")
+    def test_returns_follow_up_text(self, mock_call):
+        from schemas import Evaluation
+        mock_call.return_value = _FollowUpResponse(follow_up="Can you explain the trade-offs?")
+        sample_eval = Evaluation(
+            scores={"clarity": 7, "technical_depth": 6},
+            strengths=[], weaknesses=[],
+            grammar_correction="", simplified_version="", actionable_feedback="",
+        )
+        result = generate_follow_up(A_QUESTION, "My answer", sample_eval, A_PROFILE)
+        assert result == "Can you explain the trade-offs?"
+
+    def test_raises_on_empty_answer(self):
+        from schemas import Evaluation
+        sample_eval = Evaluation(
+            scores={}, strengths=[], weaknesses=[],
+            grammar_correction="", simplified_version="", actionable_feedback="",
+        )
+        with pytest.raises(ValueError, match="Question and answer are required"):
+            generate_follow_up(A_QUESTION, "", sample_eval, A_PROFILE)
+
+    def test_raises_on_empty_question(self):
+        from schemas import Evaluation
+        sample_eval = Evaluation(
+            scores={}, strengths=[], weaknesses=[],
+            grammar_correction="", simplified_version="", actionable_feedback="",
+        )
+        empty_q = Question(id="q0", text="", category=Competency.PROBLEM_SOLVING)
+        with pytest.raises(ValueError, match="Question and answer are required"):
+            generate_follow_up(empty_q, "answer", sample_eval, A_PROFILE)

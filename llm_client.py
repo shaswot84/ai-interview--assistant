@@ -9,7 +9,7 @@ from pydantic import BaseModel
 
 from config import config
 from fallback_data import fallback_questions
-from prompts import SCORECARD_PROMPT, get_evaluation_prompt, get_question_prompt
+from prompts import FOLLOW_UP_PROMPT, SCORECARD_PROMPT, get_evaluation_prompt, get_question_prompt
 from providers import get_openai_client
 from schemas import Evaluation, Question, QuestionConfig, QuestionType, Scorecard, SessionState, UserProfile
 
@@ -42,6 +42,11 @@ class _ScorecardResponse(BaseModel):
     model_answer: str
     overall_assessment: str
     grade: str
+
+
+class _FollowUpResponse(BaseModel):
+    """Internal Pydantic model for follow-up question generation."""
+    follow_up: str
 
 
 def _call_with_retry(
@@ -207,17 +212,25 @@ def _evaluate_llm(
     ]
     result = _call_with_retry(messages, _EvaluationResponse, temperature=config.evaluation_temperature)
 
-    # Extract dimension scores from extra fields (anything not a known field)
-    KNOWN_FIELDS = {"strengths", "weaknesses", "grammar_correction", "simplified_version", "actionable_feedback"}
+    # Extract dimension scores, score_reasons, and confidence from response fields
+    KNOWN_FIELDS = {"strengths", "weaknesses", "grammar_correction", "simplified_version", "actionable_feedback", "confidence"}
     scores: dict[str, int] = {}
+    score_reasons: dict[str, str] = {}
+    confidence: float = 1.0
     for key, val in result.model_dump().items():
         if key in KNOWN_FIELDS:
+            if key == "confidence" and isinstance(val, (int, float)):
+                confidence = max(0.0, min(1.0, float(val)))
             continue
-        if isinstance(val, (int, float)):
+        if key.endswith("_reason") and isinstance(val, str):
+            score_reasons[key] = val
+        elif isinstance(val, (int, float)):
             scores[key] = max(1, min(10, int(val)))
 
     return Evaluation(
         scores=scores,
+        score_reasons=score_reasons,
+        confidence=confidence,
         strengths=result.strengths,
         weaknesses=result.weaknesses,
         grammar_correction=result.grammar_correction,
@@ -273,3 +286,35 @@ def synthesize_scorecard(state: SessionState) -> Scorecard:
         overall_assessment=result.overall_assessment,
         grade=result.grade,
     )
+
+
+def generate_follow_up(
+    question: Question,
+    answer: str,
+    evaluation: Evaluation,
+    profile: UserProfile,
+) -> str:
+    """Generate one adaptive follow-up question based on the candidate's answer."""
+    if not question.text or not answer:
+        raise ValueError("Question and answer are required to generate a follow-up.")  # noqa: TRY003
+
+    eval_summary = "\n".join(
+        f"{dim}: {score}" for dim, score in evaluation.scores.items()
+    )
+
+    messages = [
+        {"role": "system", "content": FOLLOW_UP_PROMPT},
+        {
+            "role": "user",
+            "content": (
+                f"Original question:\n{question.text}\n\n"
+                f"Candidate's answer:\n{answer}\n\n"
+                f"Evaluation summary:\n{eval_summary}"
+            ),
+        },
+    ]
+    try:
+        result = _call_with_retry(messages, _FollowUpResponse, temperature=config.evaluation_temperature)
+        return result.follow_up
+    except Exception:
+        return "Can you go deeper on that?"

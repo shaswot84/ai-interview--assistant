@@ -17,6 +17,15 @@ class Seniority(str, Enum):
     LEAD = "Lead"
 
 
+class InterviewerStyle(str, Enum):
+    """Interviewer personality / style calibration."""
+    FAANG = "faang"
+    STARTUP = "startup"
+    GAMING = "gaming"
+    FINANCE = "finance"
+    DEFAULT = "default"
+
+
 class QuestionCategory(str, Enum):
     """Type of interview question. Kept for backward compatibility; use Competency for new questions."""
     TECHNICAL = "technical"
@@ -85,6 +94,7 @@ class UserProfile(BaseModel):
     seniority: Seniority
     industry: str
     interview_type: str
+    interviewer_style: InterviewerStyle = InterviewerStyle.DEFAULT
 
 
 class Question(BaseModel):
@@ -108,6 +118,8 @@ class Question(BaseModel):
 class Evaluation(BaseModel):
     """Scores for a single answer — dynamic dimensions per question type."""
     scores: dict[str, int]
+    score_reasons: dict[str, str] = Field(default_factory=dict)
+    confidence: float = Field(default=1.0, ge=0.0, le=1.0)
     strengths: list[str]
     weaknesses: list[str]
     grammar_correction: str

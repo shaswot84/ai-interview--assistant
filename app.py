@@ -7,7 +7,7 @@ import chainlit as cl
 
 from export import generate_markdown_transcript, generate_pdf
 from llm_client import evaluate_answer, generate_questions, synthesize_scorecard, validate_role
-from schemas import InterviewState, QuestionConfig, QuestionType, Seniority, SessionState, UserProfile
+from schemas import InterviewState, InterviewerStyle, QuestionConfig, QuestionType, Seniority, SessionState, UserProfile
 from scoring import get_letter_grade, prepare_radar_chart_data, render_radar_chart
 from session_state import transition
 from timer import get_timer_limit, is_timed_out
@@ -473,7 +473,7 @@ async def _show_feedback(state: SessionState, eval_failed: bool = False):
         return
 
     from scoring import calculate_question_score
-    total = calculate_question_score(eval_)
+    total = calculate_question_score(eval_, question_type=q.question_type.value)
     score_rows = "".join(
         f"| {k.capitalize()} | {v}/10 |\n"
         for k, v in eval_.scores.items()
@@ -718,6 +718,23 @@ async def _run_interview_core():
             else:
                 data[field] = ""
 
+    # Optional: pick interviewer style
+    style_res = await cl.AskActionMessage(
+        content="Choose an **interviewer style** (or pick Default):",
+        actions=[
+            cl.Action(name="style", payload={"value": "default"}, label="Default"),
+            cl.Action(name="style", payload={"value": "faang"}, label="FAANG"),
+            cl.Action(name="style", payload={"value": "startup"}, label="Startup"),
+            cl.Action(name="style", payload={"value": "gaming"}, label="Gaming"),
+            cl.Action(name="style", payload={"value": "finance"}, label="Finance"),
+        ],
+    ).send()
+    style_value = style_res["payload"]["value"] if style_res else "default"
+    try:
+        interviewer_style = InterviewerStyle(style_value)
+    except ValueError:
+        interviewer_style = InterviewerStyle.DEFAULT
+
     try:
         seniority = Seniority(data.get("seniority", ""))
     except ValueError:
@@ -729,6 +746,7 @@ async def _run_interview_core():
         seniority=seniority,
         industry=data.get("industry", ""),
         interview_type="technical",
+        interviewer_style=interviewer_style,
     )
     state = _get_state()
     state.profile = profile

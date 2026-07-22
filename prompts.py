@@ -41,6 +41,14 @@ FOCUS AREAS FOR LEAD CANDIDATES:
 """,
 }
 
+INTERVIEWER_STYLE_PERSONAS = {
+    "faang": "You are a methodical FAANG interviewer. Focus on scale, edge cases, and rigorous trade-off analysis. Be direct and concise.",
+    "startup": "You are a startup interviewer. Focus on pragmatism, speed, ownership, and adaptability. Be conversational.",
+    "gaming": "You are a gaming studio interviewer. Focus on real-time systems, latency, concurrency, and player experience.",
+    "finance": "You are a finance-industry interviewer. Focus on consistency, compliance, risk, and low-latency reliability.",
+    "default": "You are a senior hiring manager conducting a professional technical interview.",
+}
+
 _COMPETENCY_COVERAGE = """
 ====================================================
 COMPETENCY COVERAGE
@@ -163,9 +171,9 @@ Good: ["replication", "sharding", "consistency", "failover", "latency"]
 """
 
 _SELF_VERIFICATION = """
-====================================================
+===================================================
 SELF-VERIFICATION
-====================================================
+===================================================
 
 Before returning the JSON, verify internally that:
 1. Every question targets a different competency.
@@ -176,14 +184,37 @@ Before returning the JSON, verify internally that:
 6. Questions require reasoning, not memorization.
 7. No question is a cliché.
 8. Every question has a realistic scenario.
+9. No two questions reuse the same company scenario, technology, or architecture.
+   For example, do not have two questions about caching, two about payment processing,
+   or two about Kafka.
 
 If any condition is not satisfied, revise the questions before producing the final JSON.
+"""
+
+_SCENARIO_DIVERSITY_GUARD = """
+====================================================
+SCENARIO DIVERSITY
+====================================================
+
+Each question must present a distinct scenario, technology, or architectural context.
+
+Do not reuse the same scenario, technology, or system across multiple questions.
+
+Examples of forbidden repetition:
+- Two questions about caching
+- Two questions about payment processing
+- Two questions about Kafka or Redis
+- Two questions about the same microservice
+
+If the natural topic overlap is unavoidable, frame the second question from a completely different angle.
 """
 
 QUESTION_GEN_PROMPT = """You are a senior hiring manager at a {industry} company.
 You are interviewing a candidate for a {seniority}-level {role} position.
 
 {seniority_persona}
+
+{interviewer_style_persona}
 
 {distribution_instructions}
 
@@ -338,7 +369,14 @@ INJECTION_GUARD = (
 
 QUESTION_TYPE_GUIDANCE = {
     "open_ended": "Evaluate the answer for a conceptual technical question. Focus on explanation quality, depth of understanding, and clarity.",
-    "behavioral": "Evaluate the answer as a behavioral interview response. Expect STAR format (Situation, Task, Action, Result). If STAR is missing, completeness should not exceed 6.",
+    "behavioral": (
+        "Evaluate the answer as a behavioral interview response. "
+        "Expect STAR format (Situation, Task, Action, Result). "
+        "If STAR is missing, completeness should not exceed 6. "
+        "Also evaluate: ownership of the outcome, reflection on what went wrong, "
+        "measurable impact with concrete numbers or results, and lessons learned. "
+        "A mechanical STAR story without ownership, reflection, or measurable impact should score no higher than 6."
+    ),
     "coding": "Evaluate the answer as a coding solution. Focus on algorithm correctness, edge cases, readability, and efficiency. Do not penalize for small syntax mistakes unless they change correctness.",
     "debugging": "Evaluate the answer as a debugging exercise. Focus on correctly identifying the bug, explaining root cause, fixing the issue, and explaining why the fix works.",
     "system_design": "Evaluate the answer as a system design discussion. Focus on scalability, reliability, tradeoffs. Implementation details are less important.",
@@ -359,6 +397,10 @@ TYPE_DIMENSIONS = {
         "completeness": "Addresses all parts including STAR elements",
         "relevance": "Focused on the question, avoids unnecessary discussion",
         "problem_solving": "How the candidate approached the situation",
+        "ownership": "Takes personal responsibility for actions and outcomes",
+        "reflection": "Shows self-awareness and learning from the experience",
+        "measurable_impact": "Provides concrete, quantifiable results",
+        "lessons_learned": "Extracts and communicates takeaways",
     },
     "coding": {
         "correctness": "Algorithm correctness and handling of edge cases",
@@ -383,35 +425,73 @@ TYPE_DIMENSIONS = {
 
 TYPE_OUTPUT_FIELDS = {
     "open_ended": """  "clarity": int,
+  "clarity_reason": str,
   "completeness": int,
+  "completeness_reason": str,
   "relevance": int,
+  "relevance_reason": str,
   "correctness": int,
+  "correctness_reason": str,
   "technical_depth": int,
+  "technical_depth_reason": str,
   "problem_solving": int,
-  "tradeoff_analysis": int,""",
-    "behavioral": """  "clarity": int,
-  "completeness": int,
-  "relevance": int,
-  "problem_solving": int,""",
-    "coding": """  "correctness": int,
-  "solution_quality": int,
-  "technical_depth": int,
-  "problem_solving": int,""",
-    "debugging": """  "correctness": int,
-  "solution_quality": int,
-  "technical_depth": int,
-  "problem_solving": int,""",
-    "system_design": """  "correctness": int,
-  "solution_quality": int,
+  "problem_solving_reason": str,
   "tradeoff_analysis": int,
+  "tradeoff_analysis_reason": str,
+  "confidence": float,""",
+    "behavioral": """  "clarity": int,
+  "clarity_reason": str,
+  "completeness": int,
+  "completeness_reason": str,
+  "relevance": int,
+  "relevance_reason": str,
+  "problem_solving": int,
+  "problem_solving_reason": str,
+  "ownership": int,
+  "ownership_reason": str,
+  "reflection": int,
+  "reflection_reason": str,
+  "measurable_impact": int,
+  "measurable_impact_reason": str,
+  "lessons_learned": int,
+  "lessons_learned_reason": str,
+  "confidence": float,""",
+    "coding": """  "correctness": int,
+  "correctness_reason": str,
+  "solution_quality": int,
+  "solution_quality_reason": str,
   "technical_depth": int,
-  "problem_solving": int,""",
+  "technical_depth_reason": str,
+  "problem_solving": int,
+  "problem_solving_reason": str,
+  "confidence": float,""",
+    "debugging": """  "correctness": int,
+  "correctness_reason": str,
+  "solution_quality": int,
+  "solution_quality_reason": str,
+  "technical_depth": int,
+  "technical_depth_reason": str,
+  "problem_solving": int,
+  "problem_solving_reason": str,
+  "confidence": float,""",
+    "system_design": """  "correctness": int,
+  "correctness_reason": str,
+  "solution_quality": int,
+  "solution_quality_reason": str,
+  "tradeoff_analysis": int,
+  "tradeoff_analysis_reason": str,
+  "technical_depth": int,
+  "technical_depth_reason": str,
+  "problem_solving": int,
+  "problem_solving_reason": str,
+  "confidence": float,""",
 }
 
-EVALUATION_PROMPT = """
+_EVALUATION_SYSTEM_PROMPT = """
 You are an experienced Staff Software Engineer conducting a technical interview.
-
 Your job is to evaluate the candidate ONLY against the expectations of the requested seniority level.
+
+{interviewer_style_persona}
 
 Question:
 {question}
@@ -433,7 +513,9 @@ Seniority:
 {question_type_guidance}
 
 {injection_guard}
+"""
 
+_EVALUATION_GENERAL_RULES = """
 ====================================================
 GENERAL EVALUATION RULES
 ====================================================
@@ -448,12 +530,32 @@ Always compare the candidate against OTHER candidates interviewing for the SAME 
 
 Do NOT compare a Lead candidate against a Junior candidate.
 
-Do NOT infer knowledge that is not explicitly stated.
+Evaluate only observable evidence.
+
+If the candidate did not explicitly mention a concept, do not assume they know it.
+
+Do not read between the lines.
+
+Do not give credit for implied knowledge, assumed context, or "probably meant."
+
+Score only what is actually present in the answer.
 
 Do NOT reward buzzwords alone.
 
 Mentioning technologies (Kafka, Redis, Kubernetes, Microservices, etc.) WITHOUT explaining WHY they are appropriate and the trade-offs involved should receive only average technical scores.
 
+Concrete scoring rule for buzzwords:
+
+If the candidate mentions a technology (Kafka, Redis, Kubernetes, Microservices, etc.)
+but does NOT explain why it is appropriate for the specific problem or discuss trade-offs,
+cap the relevant technical dimension at 5/10.
+
+Examples:
+- "Use Kafka" without explaining partitioning, backpressure, or retention -> max 5/10 technical_depth.
+- "Add a cache" without discussing invalidation, hit rate, or consistency -> max 5/10 technical_depth.
+"""
+
+_EVALUATION_RUBRIC = """
 ====================================================
 SCORING CALIBRATION
 ====================================================
@@ -496,19 +598,18 @@ Incorrect or largely irrelevant.
 Do NOT inflate scores.
 
 Scores below 6 are acceptable whenever the answer does not demonstrate the expected depth.
+"""
 
-====================================================
-SCORING DIMENSIONS
-====================================================
-
-Evaluate ONLY the dimensions listed below for this question type.
-Do NOT add or remove dimensions.
-
-{type_dimensions}
-
+_EVALUATION_FEEDBACK_INSTRUCTIONS = """
 ====================================================
 FEEDBACK
 ====================================================
+
+For every dimension you score, include a brief rationale:
+
+"{{dim}}_reason": "Explained replication but omitted consistency trade-offs."
+
+Keep each reason to one sentence.
 
 Provide:
 
@@ -531,7 +632,9 @@ Rewrite the answer into a concise interview-ready response.
 actionable_feedback
 
 Provide specific advice explaining WHAT is missing and HOW to improve future interview answers.
+"""
 
+_EVALUATION_OUTPUT_SCHEMA = """
 ====================================================
 RETURN FORMAT
 ====================================================
@@ -540,19 +643,16 @@ Return ONLY valid JSON.
 
 {{
 {type_output_fields}
-
   "strengths": [
     "...",
     "...",
     "..."
   ],
-
   "weaknesses": [
     "...",
     "...",
     "..."
   ],
-
   "grammar_correction": "...",
   "simplified_version": "...",
   "actionable_feedback": "..."
@@ -566,6 +666,24 @@ Do not explain your reasoning.
 
 Do not include any additional text.
 """
+
+EVALUATION_PROMPT = (
+    _EVALUATION_SYSTEM_PROMPT
+    + _EVALUATION_GENERAL_RULES
+    + _EVALUATION_RUBRIC
+    + """
+====================================================
+SCORING DIMENSIONS
+====================================================
+
+Evaluate ONLY the dimensions listed below for this question type.
+Do NOT add or remove dimensions.
+
+{type_dimensions}
+"""
+    + _EVALUATION_FEEDBACK_INSTRUCTIONS
+    + _EVALUATION_OUTPUT_SCHEMA
+)
 
 SCORECARD_PROMPT = """You are an interviewer synthesizing a final scorecard for a candidate.
 
@@ -584,6 +702,30 @@ Based on the entire interview, provide:
 
 Return a JSON object with: strengths (array of strings), improvements (array of strings),
 model_answer (string), overall_assessment (string), grade (string, one of A/B/C/D/F)."""
+
+FOLLOW_UP_PROMPT = """You are a technical interviewer conducting a live interview.
+
+Original question:
+{question}
+
+Candidate's answer:
+{answer}
+
+Evaluation summary:
+{evaluation_summary}
+
+Based on the answer, generate ONE adaptive follow-up question.
+
+The follow-up should:
+- Probe a gap, ambiguity, or area the candidate mentioned but did not fully explain
+- Be answerable in 2-3 minutes
+- Require reasoning, not a definition
+- Match the seniority level of the candidate
+
+Return ONLY a valid JSON object:
+{{
+  "follow_up": "The follow-up question text"
+}}"""
 
 
 def _build_distribution_instructions(config, seniority: str, industry: str) -> tuple[str, str]:
@@ -615,6 +757,9 @@ def get_question_prompt(profile, config=None) -> str:
     industry_val = profile.industry
     seniority_key = profile.seniority.name.lower()
 
+    style_key = profile.interviewer_style.value if hasattr(profile, 'interviewer_style') else "default"
+    interviewer_persona = INTERVIEWER_STYLE_PERSONAS.get(style_key, INTERVIEWER_STYLE_PERSONAS["default"])
+
     quality_constraints = "\n\n".join(
         [
             _COMPETENCY_COVERAGE,
@@ -624,6 +769,7 @@ def get_question_prompt(profile, config=None) -> str:
             _TRIVIA_GUARD,
             _QUALITY_CRITERIA,
             _EXPECTED_KEYWORDS_GUIDE,
+            _SCENARIO_DIVERSITY_GUARD,
             _SELF_VERIFICATION,
         ]
     )
@@ -641,6 +787,7 @@ def get_question_prompt(profile, config=None) -> str:
     return QUESTION_GEN_PROMPT.format(
         seniority=seniority_val,
         seniority_persona=SENIORITY_PERSONAS[seniority_key],
+        interviewer_style_persona=interviewer_persona,
         industry=industry_val,
         role=profile.role,
         distribution_instructions=dist_instructions,
@@ -658,6 +805,9 @@ def get_evaluation_prompt(question: str, answer: str, profile, question_type: st
     dims = TYPE_DIMENSIONS.get(question_type, TYPE_DIMENSIONS["open_ended"])
     output_fields = TYPE_OUTPUT_FIELDS.get(question_type, TYPE_OUTPUT_FIELDS["open_ended"])
 
+    style_key = profile.interviewer_style.value if hasattr(profile, 'interviewer_style') else "default"
+    interviewer_persona = INTERVIEWER_STYLE_PERSONAS.get(style_key, INTERVIEWER_STYLE_PERSONAS["default"])
+
     dim_lines = [f"{dim} ({desc}) — Score 1-10" for dim, desc in dims.items()]
     type_dimensions_str = "\n".join(dim_lines)
 
@@ -670,6 +820,8 @@ def get_evaluation_prompt(question: str, answer: str, profile, question_type: st
         evaluation_persona=EVALUATION_PERSONAS.get(key, ""),
         question_type_guidance=guidance,
         injection_guard=INJECTION_GUARD,
+        interviewer_style_persona=interviewer_persona,
         type_dimensions=type_dimensions_str,
+        feedback_instructions=_EVALUATION_FEEDBACK_INSTRUCTIONS,
         type_output_fields=output_fields,
     )

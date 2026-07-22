@@ -28,23 +28,37 @@ class TestCalculateQuestionScore:
 
     def test_all_max_returns_100(self):
         e = _eval({"clarity": 10, "correctness": 10, "depth": 10})
-        assert calculate_question_score(e) == 100.0
+        assert calculate_question_score(e) == 100
 
     def test_all_min_returns_10(self):
         e = _eval({"clarity": 1, "correctness": 1, "depth": 1})
-        assert calculate_question_score(e) == 10.0
+        assert calculate_question_score(e) == 10
 
     def test_mid_range(self):
         e = _eval({"clarity": 5, "correctness": 5, "depth": 5})
-        assert calculate_question_score(e) == 50.0
+        assert calculate_question_score(e) == 50
 
     def test_single_dimension(self):
         e = _eval({"correctness": 7})
-        assert calculate_question_score(e) == 70.0
+        assert calculate_question_score(e) == 70
 
     def test_empty_scores(self):
         e = _eval({})
-        assert calculate_question_score(e) == 0.0
+        assert calculate_question_score(e) == 0
+
+    def test_weighted_different_types_different_scores(self):
+        e = _eval({"correctness": 10, "technical_depth": 5, "problem_solving": 5})
+        open_score = calculate_question_score(e, "open_ended")
+        coding_score = calculate_question_score(e, "coding")
+        assert open_score != coding_score
+
+    def test_unweighted_dimension_defaults_to_weight_1(self):
+        e = _eval({"correctness": 10, "unknown_dim": 10})
+        score = calculate_question_score(e, "open_ended")
+        # correctness weight=0.20, unknown_dim weight=1.0
+        # total = 10*0.20 + 10*1.0 = 12.0, weight_sum = 0.20+1.0 = 1.20
+        # result = int(round(12.0/1.20*10)) = 100
+        assert score == 100
 
 
 class TestCalculateOverallScore:

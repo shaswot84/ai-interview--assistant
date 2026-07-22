@@ -5,14 +5,63 @@ import plotly.io as pio
 
 from schemas import Evaluation, LetterGrade
 
+TYPE_DIMENSION_WEIGHTS: dict[str, dict[str, float]] = {
+    "open_ended": {
+        "clarity": 0.15,
+        "completeness": 0.20,
+        "relevance": 0.15,
+        "correctness": 0.20,
+        "technical_depth": 0.15,
+        "problem_solving": 0.10,
+        "tradeoff_analysis": 0.05,
+    },
+    "behavioral": {
+        "clarity": 0.15,
+        "completeness": 0.20,
+        "relevance": 0.10,
+        "problem_solving": 0.15,
+        "ownership": 0.15,
+        "reflection": 0.10,
+        "measurable_impact": 0.10,
+        "lessons_learned": 0.05,
+    },
+    "coding": {
+        "correctness": 0.35,
+        "solution_quality": 0.25,
+        "technical_depth": 0.20,
+        "problem_solving": 0.20,
+    },
+    "debugging": {
+        "correctness": 0.30,
+        "solution_quality": 0.25,
+        "technical_depth": 0.25,
+        "problem_solving": 0.20,
+    },
+    "system_design": {
+        "correctness": 0.25,
+        "solution_quality": 0.20,
+        "tradeoff_analysis": 0.30,
+        "technical_depth": 0.15,
+        "problem_solving": 0.10,
+    },
+}
 
-def calculate_question_score(eval_: Evaluation) -> float:
-    """Compute an overall score (0–100) from the average of all dimension scores."""
+
+def calculate_question_score(eval_: Evaluation, question_type: str = "open_ended") -> int:
+    """Compute an overall score (0–100) from weighted dimension scores for the question type."""
     dims = eval_.scores
     if not dims:
-        return 0.0
-    avg = sum(dims.values()) / len(dims)
-    return round(avg * 10, 1)
+        return 0
+    weights = TYPE_DIMENSION_WEIGHTS.get(question_type, {})
+    total = 0.0
+    weight_sum = 0.0
+    for dim, score in dims.items():
+        weight = weights.get(dim, 1.0)
+        total += score * weight
+        weight_sum += weight
+    if weight_sum == 0:
+        return 0
+    return int(round((total / weight_sum) * 10))
 
 
 def calculate_overall_score(evaluations: dict[str, Evaluation]) -> float:
