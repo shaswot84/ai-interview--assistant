@@ -3,9 +3,9 @@
 import pytest
 
 from schemas import (
+    Competency,
     Evaluation,
     Question,
-    QuestionCategory,
     Seniority,
     SessionState,
     UserProfile,
@@ -25,13 +25,13 @@ def sample_profile() -> UserProfile:
 
 @pytest.fixture
 def sample_questions() -> list[Question]:
-    """Five sample questions (3 technical, 2 behavioural)."""
+    """Five sample questions (3 technical, 2 behavioural), each with a distinct competency."""
     return [
-        Question(id="q1", text="What is REST?", category=QuestionCategory.TECHNICAL),
-        Question(id="q2", text="Explain ACID.", category=QuestionCategory.TECHNICAL),
-        Question(id="q3", text="What is Docker?", category=QuestionCategory.TECHNICAL),
-        Question(id="q4", text="Tell me about a conflict.", category=QuestionCategory.BEHAVIOURAL),
-        Question(id="q5", text="How do you prioritise?", category=QuestionCategory.BEHAVIOURAL),
+        Question(id="q1", text="What is REST?", category=Competency.API_DESIGN),
+        Question(id="q2", text="Explain ACID.", category=Competency.DATABASES),
+        Question(id="q3", text="What is Docker?", category=Competency.PROBLEM_SOLVING),
+        Question(id="q4", text="Tell me about a conflict.", category=Competency.COMMUNICATION),
+        Question(id="q5", text="How do you prioritise?", category=Competency.OWNERSHIP),
     ]
 
 

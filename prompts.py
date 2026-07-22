@@ -41,6 +41,145 @@ FOCUS AREAS FOR LEAD CANDIDATES:
 """,
 }
 
+_COMPETENCY_COVERAGE = """
+====================================================
+COMPETENCY COVERAGE
+====================================================
+
+A good interview evaluates multiple distinct competencies.
+Every question must target ONE primary competency.
+No two questions may target the same competency.
+
+Allowed competencies:
+- problem_solving
+- debugging
+- algorithms
+- data_structures
+- api_design
+- databases
+- concurrency
+- distributed_systems
+- testing
+- security
+- performance
+- communication
+- leadership
+- ownership
+- tradeoff_analysis
+- system_design
+- observability
+- monitoring
+- reliability_engineering
+
+Set the "category" field to the primary competency for that question.
+Use specific competencies, not generic labels like "technical" or "behavioural".
+"""
+
+_PROGRESSIVE_DIFFICULTY = """
+====================================================
+PROGRESSIVE DIFFICULTY
+====================================================
+
+Order questions from easiest to hardest:
+- Question 1: warm-up
+- Question 2: foundational
+- Question 3: moderate
+- Question 4: challenging
+- Question 5+: stretch (if applicable)
+
+Difficulty must match the requested seniority level.
+"""
+
+_INDUSTRY_ADAPTATION = """
+====================================================
+INDUSTRY CONTEXT
+====================================================
+
+Every question must reflect the target industry: {industry}.
+
+FinTech: consistency, fraud detection, payments, compliance, low latency.
+Healthcare: privacy, reliability, auditability, data integrity.
+Gaming: matchmaking, latency, concurrency, real-time state.
+E-commerce: inventory, recommendations, search, scalability, checkout.
+Cloud/SaaS: distributed systems, observability, autoscaling, multi-tenancy.
+
+Frame questions with realistic industry constraints where possible.
+"""
+
+_CLICHE_GUARD = """
+====================================================
+AVOID CLICHÉS
+====================================================
+
+Do NOT generate these overused questions:
+- "Difference between REST and SOAP"
+- "Explain OOP"
+- "What is polymorphism"
+- "Difference between SQL and NoSQL"
+- "Explain the OSI model"
+- "What is Docker?"
+- "Explain microservices"
+- "What is an API?"
+
+Prefer realistic scenarios over textbook definitions.
+"""
+
+_TRIVIA_GUARD = """
+====================================================
+BAN TRIVIA
+====================================================
+
+Do NOT test memorization, definitions, syntax, command names, or API signatures.
+Evaluate reasoning, decision-making, tradeoff analysis, debugging approach, and problem decomposition.
+"""
+
+_QUALITY_CRITERIA = """
+====================================================
+QUESTION QUALITY CHECKLIST
+====================================================
+
+Every question must satisfy ALL of these:
+✓ Clear
+✓ Specific
+✓ Unambiguous
+✓ Answerable in 5-10 minutes
+✓ Tests reasoning, not memorization
+✓ Has multiple acceptable approaches
+✓ Appropriate for the requested seniority
+✓ Has realistic context
+"""
+
+_EXPECTED_KEYWORDS_GUIDE = """
+====================================================
+EXPECTED KEYWORDS
+====================================================
+
+"expected_keywords" must contain CONCEPTS that an excellent answer would mention.
+
+Use concepts, not exact wording or labels.
+
+Bad:  ["redis", "scale", "database"]
+Good: ["replication", "sharding", "consistency", "failover", "latency"]
+"""
+
+_SELF_VERIFICATION = """
+====================================================
+SELF-VERIFICATION
+====================================================
+
+Before returning the JSON, verify internally that:
+1. Every question targets a different competency.
+2. No two questions overlap on the same concept.
+3. Questions progress easy → hard.
+4. Industry context is reflected.
+5. Seniority expectations are appropriate.
+6. Questions require reasoning, not memorization.
+7. No question is a cliché.
+8. Every question has a realistic scenario.
+
+If any condition is not satisfied, revise the questions before producing the final JSON.
+"""
+
 QUESTION_GEN_PROMPT = """You are a senior hiring manager at a {industry} company.
 You are interviewing a candidate for a {seniority}-level {role} position.
 
@@ -50,13 +189,15 @@ You are interviewing a candidate for a {seniority}-level {role} position.
 
 {question_type_instructions}
 
+{quality_constraints}
+
 Return ONLY a valid JSON object with this structure:
 {{
   "questions": [
     {{
       "id": "q1",
       "text": "The question text",
-      "category": "technical|behavioural",
+      "category": "problem_solving",
       "question_type": "{question_type_example}",
       "difficulty": "{seniority}",
       "expected_keywords": ["keyword1", "keyword2"]
@@ -469,9 +610,23 @@ def _build_distribution_instructions(config, seniority: str, industry: str) -> t
 
 
 def get_question_prompt(profile, config=None) -> str:
-    """Build the question-generation system prompt for the given profile and optional config."""
+    """Build the question-generation system prompt with all quality constraints."""
     seniority_val = profile.seniority.value
     industry_val = profile.industry
+    seniority_key = profile.seniority.name.lower()
+
+    quality_constraints = "\n\n".join(
+        [
+            _COMPETENCY_COVERAGE,
+            _PROGRESSIVE_DIFFICULTY,
+            _INDUSTRY_ADAPTATION.format(industry=industry_val),
+            _CLICHE_GUARD,
+            _TRIVIA_GUARD,
+            _QUALITY_CRITERIA,
+            _EXPECTED_KEYWORDS_GUIDE,
+            _SELF_VERIFICATION,
+        ]
+    )
 
     if config is None:
         dist_instructions = (
@@ -485,12 +640,13 @@ def get_question_prompt(profile, config=None) -> str:
 
     return QUESTION_GEN_PROMPT.format(
         seniority=seniority_val,
-        seniority_persona=SENIORITY_PERSONAS[profile.seniority.name.lower()],
+        seniority_persona=SENIORITY_PERSONAS[seniority_key],
         industry=industry_val,
         role=profile.role,
         distribution_instructions=dist_instructions,
         question_type_instructions="",
         question_type_example=type_example,
+        quality_constraints=quality_constraints,
     )
 
 

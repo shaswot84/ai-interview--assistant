@@ -4,10 +4,10 @@ import pytest
 from pydantic import ValidationError
 
 from schemas import (
+    Competency,
     Evaluation,
     LetterGrade,
     Question,
-    QuestionCategory,
     Scorecard,
     Seniority,
     SessionState,
@@ -51,9 +51,9 @@ class TestQuestion:
 
     def test_valid_question(self):
         q = Question(
-            id="q1", text="What is OOP?", category=QuestionCategory.TECHNICAL
+            id="q1", text="What is OOP?", category=Competency.ALGORITHMS
         )
-        assert q.category == QuestionCategory.TECHNICAL
+        assert q.category == Competency.ALGORITHMS
 
 
 class TestEvaluation:
@@ -133,8 +133,8 @@ class TestSessionState:
             role="Dev", seniority=Seniority.MID, industry="Tech", interview_type="behavioural"
         )
         questions = [
-            Question(id="q1", text="Q1?", category=QuestionCategory.TECHNICAL),
-            Question(id="q2", text="Q2?", category=QuestionCategory.BEHAVIOURAL),
+            Question(id="q1", text="Q1?", category=Competency.API_DESIGN),
+            Question(id="q2", text="Q2?", category=Competency.COMMUNICATION),
         ]
         state = SessionState(
             profile=profile,

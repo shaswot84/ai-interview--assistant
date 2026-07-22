@@ -15,11 +15,11 @@ from llm_client import (
     synthesize_scorecard,
 )
 from schemas import (
+    Competency,
     Evaluation,
     InterviewState,
     LetterGrade,
     Question,
-    QuestionCategory,
     QuestionType,
     Seniority,
     SessionState,
@@ -35,7 +35,7 @@ A_PROFILE = UserProfile(
     interview_type="technical",
 )
 
-A_QUESTION = Question(id="q1", text="Test?", category=QuestionCategory.TECHNICAL)
+A_QUESTION = Question(id="q1", text="Test?", category=Competency.ALGORITHMS)
 
 
 def _mock_chat_completion(content: str | None):
@@ -194,7 +194,7 @@ class TestFallback:
         from fallback_data import fallback_questions
         result = fallback_questions(A_PROFILE, needed=5)
         assert len(result) == 5
-        tech = [q for q in result if q.category == QuestionCategory.TECHNICAL]
-        behav = [q for q in result if q.category == QuestionCategory.BEHAVIOURAL]
+        tech = [q for q in result if q.category != Competency.COMMUNICATION and q.category != Competency.LEADERSHIP and q.category != Competency.OWNERSHIP]
+        behav = [q for q in result if q.category in (Competency.COMMUNICATION, Competency.LEADERSHIP, Competency.OWNERSHIP)]
         assert len(tech) == 3
         assert len(behav) == 2

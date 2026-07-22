@@ -23,6 +23,8 @@ Personalised mock interview app powered by an OpenAI-compatible LLM. Built with 
 - Ollama guardrails use a two-stage parser (JSON → regex fallback) — do **not** add `response_format` for Ollama calls
 - Feedback content is sent as a permanent `cl.Message`; action buttons are in a separate `AskActionMessage` — never bundle content and actions in a single `AskActionMessage`
 - "End Early" button is hidden on the last question (check `is_last`) in both `_show_question()` and `_show_feedback()`
+- Question generation uses 8 quality constraint blocks: competency coverage, progressive difficulty, industry context, cliché guard, trivia guard, quality checklist, expected keywords guide, self-verification
+- `Question.category` uses the `Competency` enum (specific competencies like `problem_solving`, `api_design`) — not the generic `QuestionCategory`
 
 ## State Machine
 ```

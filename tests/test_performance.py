@@ -39,13 +39,13 @@ def profile():
 @pytest.fixture
 def sample_questions():
     """Five sample questions for evaluation/scorecard benchmarks."""
-    from schemas import Question, QuestionCategory
+    from schemas import Competency, Question
     return [
-        Question(id="q1", text="What is REST?", category=QuestionCategory.TECHNICAL),
-        Question(id="q2", text="Explain ACID properties.", category=QuestionCategory.TECHNICAL),
-        Question(id="q3", text="What is Docker?", category=QuestionCategory.TECHNICAL),
-        Question(id="q4", text="Tell me about a conflict.", category=QuestionCategory.BEHAVIOURAL),
-        Question(id="q5", text="How do you prioritise?", category=QuestionCategory.BEHAVIOURAL),
+        Question(id="q1", text="What is REST?", category=Competency.API_DESIGN),
+        Question(id="q2", text="Explain ACID properties.", category=Competency.DATABASES),
+        Question(id="q3", text="How do you debug a crash?", category=Competency.DEBUGGING),
+        Question(id="q4", text="Tell me about a conflict.", category=Competency.COMMUNICATION),
+        Question(id="q5", text="How do you prioritise?", category=Competency.OWNERSHIP),
     ]
 
 

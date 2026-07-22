@@ -18,10 +18,33 @@ class Seniority(str, Enum):
 
 
 class QuestionCategory(str, Enum):
-    """Type of interview question."""
+    """Type of interview question. Kept for backward compatibility; use Competency for new questions."""
     TECHNICAL = "technical"
     BEHAVIOURAL = "behavioural"
     BEHAVIORAL = "behavioral"
+
+
+class Competency(str, Enum):
+    """Primary competency each question evaluates."""
+    PROBLEM_SOLVING = "problem_solving"
+    DEBUGGING = "debugging"
+    ALGORITHMS = "algorithms"
+    DATA_STRUCTURES = "data_structures"
+    API_DESIGN = "api_design"
+    DATABASES = "databases"
+    CONCURRENCY = "concurrency"
+    DISTRIBUTED_SYSTEMS = "distributed_systems"
+    TESTING = "testing"
+    SECURITY = "security"
+    PERFORMANCE = "performance"
+    COMMUNICATION = "communication"
+    LEADERSHIP = "leadership"
+    OWNERSHIP = "ownership"
+    TRADEOFF_ANALYSIS = "tradeoff_analysis"
+    SYSTEM_DESIGN = "system_design"
+    OBSERVABILITY = "observability"
+    MONITORING = "monitoring"
+    RELIABILITY_ENGINEERING = "reliability_engineering"
 
 
 class QuestionType(str, Enum):
@@ -68,7 +91,7 @@ class Question(BaseModel):
     """An interview question with an identifier, category, and metadata."""
     id: str
     text: str
-    category: QuestionCategory
+    category: Competency
     question_type: QuestionType = QuestionType.OPEN_ENDED
     difficulty: str = ""
     expected_keywords: list[str] = []

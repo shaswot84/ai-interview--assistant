@@ -21,8 +21,49 @@ Always score based on your expert assessment of the actual response quality.
 ## 1. Question Generation
 
 **File:** `prompts.py` → `QUESTION_GEN_PROMPT`
-**Builder:** `prompts.get_question_prompt(profile, config=None)` (injects seniority persona + optional type distribution)
+**Builder:** `prompts.get_question_prompt(profile, config=None)` (injects seniority persona + optional type distribution + 8 quality constraint sections)
 **Used by:** `llm_client.generate_questions(profile, question_config=None)`
+
+### Quality constraint sections
+
+The prompt now includes 8 constraint blocks injected via `{quality_constraints}`:
+
+| Section | Purpose |
+|---------|---------|
+| COMPETENCY COVERAGE | Each question targets one distinct competency; no two questions share the same competency |
+| PROGRESSIVE DIFFICULTY | Questions ordered warm‑up → foundational → moderate → challenging → stretch |
+| INDUSTRY CONTEXT | Every question reflects the target industry (FinTech, Healthcare, Gaming, etc.) |
+| AVOID CLICHÉS | Explicit list of banned overused questions (REST vs SOAP, OOP, OSI model, etc.) |
+| BAN TRIVIA | No memorization, definitions, syntax, or API signatures — evaluate reasoning |
+| QUESTION QUALITY CHECKLIST | 8‑point checklist (clear, specific, unambiguous, answerable in 5‑10 min, etc.) |
+| EXPECTED KEYWORDS | Guide to writing concept‑based keywords (not labels) |
+| SELF-VERIFICATION | Internal 8‑point verification before returning the final JSON |
+
+### Competency enum
+
+The `category` field now uses the `Competency` enum (defined in `schemas.py`) instead of the generic `QuestionCategory`:
+
+| Competency | Type |
+|------------|------|
+| `problem_solving` | Technical |
+| `debugging` | Technical |
+| `algorithms` | Technical |
+| `data_structures` | Technical |
+| `api_design` | Technical |
+| `databases` | Technical |
+| `concurrency` | Technical |
+| `distributed_systems` | Technical |
+| `testing` | Technical |
+| `security` | Technical |
+| `performance` | Technical |
+| `tradeoff_analysis` | Technical |
+| `system_design` | Technical |
+| `observability` | Technical |
+| `monitoring` | Technical |
+| `reliability_engineering` | Technical |
+| `communication` | Behavioural |
+| `leadership` | Behavioural |
+| `ownership` | Behavioural |
 
 ### Default mode (no config, backward compatible)
 
@@ -36,13 +77,15 @@ Generate exactly 5 interview questions:
 - 3 technical questions appropriate for {seniority} level in {industry}
 - 2 behavioral questions expecting STAR-format answers
 
+{quality_constraints}
+
 Return ONLY a valid JSON object with this structure:
 {
   "questions": [
     {
       "id": "q1",
       "text": "The question text",
-      "category": "technical|behavioural",
+      "category": "problem_solving",
       "question_type": "open_ended",
       "difficulty": "{seniority}",
       "expected_keywords": ["keyword1", "keyword2"]
@@ -80,7 +123,7 @@ All questions must be appropriate for Senior level in FinTech.
 The `QUESTION_GEN_PROMPT` always includes `"question_type": "{question_type_example}"` in the JSON template. The actual per-type fields are specified in the distribution instructions.
 
 **Output schema:** `QuestionsResponse` (`{"questions": list[Question]}`) — each `Question` carries:
-- Standard: `id`, `text`, `category`, `question_type`, `difficulty`, `expected_keywords`
+- Standard: `id`, `text`, `category` (Competency enum value), `question_type`, `difficulty`, `expected_keywords`
 - MCQ: `options` (list[str]), `correct_answer` (str)
 - Yes/No: `correct_answer` (bool)
 - Coding: `starter_code`, `language`, `evaluation_type`
@@ -214,3 +257,4 @@ model_answer (string), overall_assessment (string), grade (string, one of A/B/C/
 | 2026-07-21 | — | Added `EVALUATION_PERSONAS` with detailed scoring rubrics per seniority level |
 | 2026-07-22 | EVALUATION_PROMPT | Complete rewrite: added `question_type` placeholder, `QUESTION_TYPE_GUIDANCE` dict, `TYPE_DIMENSIONS` dict (per-type dimension sets), `TYPE_OUTPUT_FIELDS` dict (per-type JSON format). Removed `grammar`, `impact`, `architecture_design` dimensions. Added `correctness` and `solution_quality`. `get_evaluation_prompt()` now takes a `question_type` parameter. LLM returns only dimensions relevant to the question type. |
 | 2026-07-22 | — | MCQ/Yes/No moved to deterministic `_evaluate_objective()` — no longer uses LLM prompt. Returns single `correctness` dimension. |
+| 2026-07-22 | QUESTION_GEN_PROMPT | Added 8 quality constraint blocks (`{quality_constraints}`): COMPETENCY COVERAGE, PROGRESSIVE DIFFICULTY, INDUSTRY CONTEXT, AVOID CLICHÉS, BAN TRIVIA, QUESTION QUALITY CHECKLIST, EXPECTED KEYWORDS, SELF-VERIFICATION. `category` field now uses `Competency` enum (specific competencies like `problem_solving`, `api_design`) instead of `technical|behavioural`. |

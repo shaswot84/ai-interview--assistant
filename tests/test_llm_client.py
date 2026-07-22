@@ -14,9 +14,9 @@ from llm_client import (
     synthesize_scorecard,
 )
 from schemas import (
+    Competency,
     Evaluation,
     Question,
-    QuestionCategory,
     QuestionType,
     Scorecard,
     Seniority,
@@ -46,16 +46,16 @@ A_PROFILE = UserProfile(
 A_QUESTION = Question(
     id="q1",
     text="What is a RESTful API?",
-    category=QuestionCategory.TECHNICAL,
+    category=Competency.API_DESIGN,
 )
 
 VALID_QUESTIONS_JSON = """{
   "questions": [
-    {"id": "q1", "text": "What is REST?", "category": "technical"},
-    {"id": "q2", "text": "Explain ACID.", "category": "technical"},
-    {"id": "q3", "text": "What is Docker?", "category": "technical"},
-    {"id": "q4", "text": "Tell me about a conflict.", "category": "behavioural"},
-    {"id": "q5", "text": "How do you prioritise?", "category": "behavioural"}
+    {"id": "q1", "text": "What is REST?", "category": "api_design"},
+    {"id": "q2", "text": "Explain ACID.", "category": "databases"},
+    {"id": "q3", "text": "How do you debug a memory leak?", "category": "debugging"},
+    {"id": "q4", "text": "Tell me about a conflict.", "category": "communication"},
+    {"id": "q5", "text": "How do you prioritise?", "category": "ownership"}
   ]
 }"""
 
@@ -119,7 +119,7 @@ class TestGenerateQuestions:
     @patch("llm_client._call_with_retry")
     def test_returns_questions_from_llm(self, mock_call):
         expected = [
-            Question(id="q1", text="What is REST?", category=QuestionCategory.TECHNICAL),
+            Question(id="q1", text="What is REST?", category=Competency.API_DESIGN),
         ]
         mock_call.return_value = QuestionsResponse(questions=expected)
         result = generate_questions(A_PROFILE)
@@ -130,12 +130,50 @@ class TestGenerateQuestions:
     def test_falls_back_on_llm_failure(self, mock_fallback, mock_call):
         mock_call.side_effect = RuntimeError("API down")
         fallback_qs = [
-            Question(id="f1", text="Fallback?", category=QuestionCategory.TECHNICAL),
+            Question(id="f1", text="Fallback?", category=Competency.PROBLEM_SOLVING),
         ]
         mock_fallback.return_value = fallback_qs
         result = generate_questions(A_PROFILE)
         assert result == fallback_qs
         mock_fallback.assert_called_once_with(A_PROFILE, needed=5, question_config=None)
+
+    @patch("llm_client._call_with_retry")
+    def test_generated_questions_have_unique_competencies(self, mock_call):
+        expected = [
+            Question(id="q1", text="Q1", category=Competency.ALGORITHMS),
+            Question(id="q2", text="Q2", category=Competency.DATABASES),
+            Question(id="q3", text="Q3", category=Competency.API_DESIGN),
+            Question(id="q4", text="Q4", category=Competency.COMMUNICATION),
+            Question(id="q5", text="Q5", category=Competency.OWNERSHIP),
+        ]
+        mock_call.return_value = QuestionsResponse(questions=expected)
+        result = generate_questions(A_PROFILE)
+        competencies = [q.category for q in result]
+        assert len(competencies) == len(set(competencies))
+
+    @patch("llm_client._call_with_retry")
+    def test_generated_questions_are_not_cliches(self, mock_call):
+        mock_call.return_value = QuestionsResponse(questions=[
+            Question(id="q1", text="What is REST?", category=Competency.API_DESIGN),
+            Question(id="q2", text="Explain ACID.", category=Competency.DATABASES),
+            Question(id="q3", text="How do you debug a crash?", category=Competency.DEBUGGING),
+        ])
+        result = generate_questions(A_PROFILE)
+        cliche_phrases = ["what is docker", "explain oop", "what is polymorphism"]
+        for q in result:
+            lowered = q.text.lower()
+            assert not any(phrase in lowered for phrase in cliche_phrases), q.text
+
+    @patch("llm_client._call_with_retry")
+    def test_generated_questions_include_industry_context(self, mock_call):
+        mock_call.return_value = QuestionsResponse(questions=[
+            Question(id="q1", text="How would you handle fraud detection in FinTech?", category=Competency.PROBLEM_SOLVING,
+                     expected_keywords=["fraud", "consistency"]),
+            Question(id="q2", text="Explain ACID.", category=Competency.DATABASES),
+        ])
+        result = generate_questions(A_PROFILE)
+        industry = A_PROFILE.industry.lower()
+        assert any(industry in q.text.lower() or industry in " ".join(q.expected_keywords).lower() for q in result)
 
 
 class TestEvaluateAnswer:
@@ -169,7 +207,7 @@ class TestEvaluateAnswerDeterministic:
 
     def test_mcq_correct_answer(self):
         q = Question(
-            id="q1", text="What is 2+2?", category=QuestionCategory.TECHNICAL,
+            id="q1", text="What is 2+2?", category=Competency.PROBLEM_SOLVING,
             question_type=QuestionType.MCQ, correct_answer="4",
         )
         result = evaluate_answer(q, "4", A_PROFILE)
@@ -180,7 +218,7 @@ class TestEvaluateAnswerDeterministic:
 
     def test_mcq_wrong_answer(self):
         q = Question(
-            id="q2", text="What is 2+2?", category=QuestionCategory.TECHNICAL,
+            id="q2", text="What is 2+2?", category=Competency.PROBLEM_SOLVING,
             question_type=QuestionType.MCQ, correct_answer="4",
         )
         result = evaluate_answer(q, "5", A_PROFILE)
@@ -191,7 +229,7 @@ class TestEvaluateAnswerDeterministic:
 
     def test_mcq_case_insensitive(self):
         q = Question(
-            id="q3", text="What is REST?", category=QuestionCategory.TECHNICAL,
+            id="q3", text="What is REST?", category=Competency.API_DESIGN,
             question_type=QuestionType.MCQ, correct_answer="Representational State Transfer",
         )
         result = evaluate_answer(q, "representational state transfer", A_PROFILE)
@@ -200,7 +238,7 @@ class TestEvaluateAnswerDeterministic:
 
     def test_yes_no_correct(self):
         q = Question(
-            id="q4", text="Is Python interpreted?", category=QuestionCategory.TECHNICAL,
+            id="q4", text="Is Python interpreted?", category=Competency.ALGORITHMS,
             question_type=QuestionType.YES_NO, correct_answer="Yes",
         )
         result = evaluate_answer(q, "Yes", A_PROFILE)
@@ -209,7 +247,7 @@ class TestEvaluateAnswerDeterministic:
 
     def test_yes_no_wrong(self):
         q = Question(
-            id="q5", text="Is Python interpreted?", category=QuestionCategory.TECHNICAL,
+            id="q5", text="Is Python interpreted?", category=Competency.ALGORITHMS,
             question_type=QuestionType.YES_NO, correct_answer="Yes",
         )
         result = evaluate_answer(q, "No", A_PROFILE)
@@ -218,7 +256,7 @@ class TestEvaluateAnswerDeterministic:
 
     def test_mcq_no_correct_answer_falls_back_to_empty(self):
         q = Question(
-            id="q6", text="Test", category=QuestionCategory.TECHNICAL,
+            id="q6", text="Test", category=Competency.PROBLEM_SOLVING,
             question_type=QuestionType.MCQ, correct_answer=None,
         )
         result = evaluate_answer(q, "anything", A_PROFILE)

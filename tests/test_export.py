@@ -1,10 +1,10 @@
 """Tests for Markdown and PDF export — output format, content, and file creation."""
 
 from schemas import (
+    Competency,
     Evaluation,
     LetterGrade,
     Question,
-    QuestionCategory,
     Scorecard,
     Seniority,
     SessionState,
@@ -20,8 +20,8 @@ SAMPLE_STATE = SessionState(
         interview_type="technical",
     ),
     questions=[
-        Question(id="q1", text="What is REST?", category=QuestionCategory.TECHNICAL),
-        Question(id="q2", text="Tell me about a conflict.", category=QuestionCategory.BEHAVIOURAL),
+        Question(id="q1", text="What is REST?", category=Competency.API_DESIGN),
+        Question(id="q2", text="Tell me about a conflict.", category=Competency.COMMUNICATION),
     ],
     transcript={
         "q1": "REST is an architectural style.",

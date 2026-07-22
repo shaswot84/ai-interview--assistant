@@ -5,9 +5,9 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from schemas import (
+    Competency,
     InterviewState,
     Question,
-    QuestionCategory,
     Seniority,
     SessionState,
     UserProfile,
@@ -18,7 +18,7 @@ from session_state import InvalidTransitionError, transition
 def _state_with_questions(n: int = 3, state: InterviewState = InterviewState.IDLE) -> SessionState:
     """Helper — build a SessionState with n questions at the given state."""
     questions = [
-        Question(id=f"q{i}", text=f"Question {i}?", category=QuestionCategory.TECHNICAL)
+        Question(id=f"q{i}", text=f"Question {i}?", category=Competency.PROBLEM_SOLVING)
         for i in range(n)
     ]
     profile = UserProfile(
