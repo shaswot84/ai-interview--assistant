@@ -231,3 +231,18 @@
 - Added ADR-012 to `docs/decisions.md`
 - Updated all docs — `architecture.md`, `PROMPTS.md`, `TESTING.md`, `decisions.md`, `logs.md`, `PROGRESS.md`, `CLAUDE.md`
 - **Status:** Phase 5 dynamic per-type evaluation complete
+
+## Phase 5 — Ollama Onboarding Guardrails (2026-07-22)
+- **Ollama API config:**
+  - Added `OLLAMA_API_KEY`, `OLLAMA_BASE_URL`, `OLLAMA_MODEL` to `.env` and `config.py`
+  - Added `get_ollama_client()` in `providers.py` — returns an OpenAI-compatible client configured for the Ollama endpoint
+- **Industry guardrail:**
+  - Created `industry_guardrail.py` with `validate_industry()` — calls Ollama at `temperature=0` with `response_format=json_object` to classify industry names
+  - Returns only a boolean; raises `RuntimeError` on API failure
+  - Wired into `app.py` onboarding loop — invalid → retry prompt, API error → "temporarily unavailable" → retry
+- **Role validation migration:**
+  - `validate_role()` in `llm_client.py` rewritten to use `get_ollama_client()` directly instead of `_call_with_retry` (Groq/OpenAI)
+  - Falls back to `True` (allow) on any exception
+- **Removed:** Gemini API integration (key, config field, `google-genai` dependency, `industry_guardrail.py` Gemini version, Gemini tests)
+- **Test count:** 95 total (added 5 industry guardrail tests)
+- Updated all docs — `CLAUDE.md`, `architecture.md`, `decisions.md` (ADR-013), `PROGRESS.md`, `TESTING.md`, `TROUBLESHOOTING.md`, `logs.md`, `.env.example`

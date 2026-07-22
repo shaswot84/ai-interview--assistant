@@ -65,12 +65,18 @@ Env-based configuration loaded once at startup via `Config.from_env()`. Provides
 - Timer check on `INTERVIEWING` state: auto-skip if expired
 
 ### 3. LLM Integration (`llm_client.py` + `providers.py`)
-- `get_openai_client()` — returns configured OpenAI SDK client
-- `_call_with_retry()` — up to 2 retries with exponential backoff
-- `validate_role(role)` — LLM classifies whether a role is IT-related
+- `get_openai_client()` — returns OpenAI SDK client for Groq/OpenAI (used by question gen, evaluation, scorecard)
+- `get_ollama_client()` — returns OpenAI-compatible client pointed at the Ollama endpoint (used by guardrails)
+- `_call_with_retry()` — up to 2 retries with exponential backoff (OpenAI client only)
+- `validate_role(role)` — uses Ollama to classify whether a role is IT-related
 - `generate_questions(profile, question_config=None)` — tries LLM with optional `QuestionConfig` for type distribution; falls back to static question bank
 - `evaluate_answer(...)` — dispatches by `question.question_type`: `mcq`/`yes_no` → deterministic `_evaluate_objective()`, all others → `_evaluate_llm()` with `INJECTION_GUARD` and score clamping (1-10)
 - `synthesize_scorecard(state)` — returns `Scorecard` from full transcript
+
+### 3a. Industry Guardrail (`industry_guardrail.py`)
+- `validate_industry(input_text)` — uses Ollama to classify whether user input is a valid industry name
+- Returns only a boolean; never exposes model reasoning
+- Raises `RuntimeError` on API failure so the onboarding loop can show a friendly retry message
 
 ### 4. Prompts (`prompts.py`)
 - `SENIORITY_PERSONAS` — per-level focus areas dict (junior/mid/senior/lead) injected into the question gen prompt
@@ -142,10 +148,12 @@ Chainlit callbacks mapped to state machine actions:
 - Accepts an optional `eval_failed` parameter to display error-state feedback with a retry option.
 - Retry calls `_handle_retry()` helper which re-runs `evaluate_answer()` in a thread.
 
-**Onboarding flow:** role (IT-validated via LLM) → seniority (4-button picker) → industry → **question config** (gated settings panel with total count + per-type percentage sliders → "Generate Questions" button) → question generation → interview.
+**Onboarding flow:** role (IT-validated via Ollama `validate_role()`) → seniority (4-button picker) → industry (validated via Ollama `validate_industry()`) → **question config** (gated settings panel with total count + per-type percentage sliders → "Generate Questions" button) → question generation → interview.
 
 **Settings panel** — `_build_question_settings()` returns a `cl.ChatSettings` with `NumberInput` (total questions, 1-20) and `Slider` widgets for 6 question types (Technical Open-ended, Behavioral STAR, MCQ, Coding, Debugging, System Design). Percentages are normalized to sum to 100%. Changes are captured by `@cl.on_settings_update` and stored as `QuestionConfig` in the user session.
 
-**IT role validation** — `validate_role()` queries the LLM to classify whether the entered role is IT-related; loops until a valid IT role is provided.
+**IT role validation** — `validate_role()` queries Ollama to classify whether the entered role is IT-related; loops until a valid IT role is provided.
+
+**Industry guardrail** — `validate_industry()` queries Ollama to classify whether the entered industry name is valid; loops until a valid industry is provided, with a friendly retry on API failure.
 
 Synchronous LLM calls (`generate_questions`, `evaluate_answer`) are offloaded with `await asyncio.to_thread(...)` to prevent blocking the Chainlit event loop (which would freeze the chat input on "Stop task").

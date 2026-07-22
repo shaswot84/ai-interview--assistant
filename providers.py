@@ -1,4 +1,4 @@
-"""OpenAI client factory — creates authenticated client instances from config."""
+"""Client factories — creates authenticated OpenAI / Ollama client instances."""
 
 from openai import OpenAI
 
@@ -10,6 +10,14 @@ def get_openai_client() -> OpenAI:
     kwargs = {"api_key": config.openai_api_key}
     if config.openai_base_url:
         kwargs["base_url"] = config.openai_base_url
+    return OpenAI(**kwargs)
+
+
+def get_ollama_client() -> OpenAI:
+    """Return an OpenAI-compatible client configured for an Ollama endpoint."""
+    kwargs = {"api_key": config.ollama_api_key}
+    if config.ollama_base_url:
+        kwargs["base_url"] = config.ollama_base_url
     return OpenAI(**kwargs)
 
 

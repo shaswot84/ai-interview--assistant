@@ -21,6 +21,7 @@ uv run pytest -k "test_name" -v      # Single test
 | `test_export.py` | Markdown format, PDF file creation | 3 |
 | `test_edge_cases.py` | Injection resistance, score clamping, retry exhaustion, malformed JSON, RateLimitError, session isolation, all-skipped, fallback ratio | 4 + 5 |
 | `test_performance.py` | Latency targets (<3s: question gen, evaluation, scorecard); skipped without API key | 5 |
+| `test_industry_guardrail.py` | Industry classification (valid, invalid, backend engineer, missing API key, empty response, malformed JSON, extra text) | 7 |
 
 ## Coverage Goals
 - All state machine transitions covered (valid + invalid)

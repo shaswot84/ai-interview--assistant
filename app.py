@@ -284,6 +284,7 @@ async def _show_question(state: SessionState):
     q = state.questions[state.current_question_index]
     total = len(state.questions)
     idx = state.current_question_index + 1
+    is_last = state.current_question_index >= total - 1
 
     # Build the question content (shared across all types)
     question_content = f"### Question {idx}/{total}\n\n**{q.text}**\n\n"
@@ -308,7 +309,8 @@ async def _show_question(state: SessionState):
             for opt in q.options[:4]
         ]
         mcq_actions.append(cl.Action(name="_skip_q", payload={}, label="Skip"))
-        mcq_actions.append(cl.Action(name="_end_q", payload={}, label="End Early"))
+        if not is_last:
+            mcq_actions.append(cl.Action(name="_end_q", payload={}, label="End Early"))
         res = await cl.AskActionMessage(
             content="Choose your answer:", actions=mcq_actions
         ).send()
@@ -336,8 +338,9 @@ async def _show_question(state: SessionState):
             cl.Action(name="_yn_yes", payload={"value": "Yes"}, label="Yes"),
             cl.Action(name="_yn_no", payload={"value": "No"}, label="No"),
             cl.Action(name="_skip_q", payload={}, label="Skip"),
-            cl.Action(name="_end_q", payload={}, label="End Early"),
         ]
+        if not is_last:
+            yn_actions.append(cl.Action(name="_end_q", payload={}, label="End Early"))
         res = await cl.AskActionMessage(
             content="Choose your answer:", actions=yn_actions
         ).send()
@@ -364,8 +367,9 @@ async def _show_question(state: SessionState):
     actions = [
         cl.Action(name="answer", payload={}, label="Answer"),
         cl.Action(name="skip", payload={}, label="Skip"),
-        cl.Action(name="end_early", payload={}, label="End Early"),
     ]
+    if not is_last:
+        actions.append(cl.Action(name="end_early", payload={}, label="End Early"))
     res = await cl.AskActionMessage(
         content="How would you like to proceed?", actions=actions
     ).send()
@@ -447,8 +451,9 @@ async def _show_feedback(state: SessionState, eval_failed: bool = False):
             actions.append(cl.Action(name="_feedback_finish", payload={}, label="Finish"))
         else:
             actions.append(cl.Action(name="_feedback_next", payload={}, label="Next Question"))
-        actions.append(cl.Action(name="_feedback_end_early", payload={}, label="End Early"))
-        res = await cl.AskActionMessage(content=content, actions=actions).send()
+            actions.append(cl.Action(name="_feedback_end_early", payload={}, label="End Early"))
+        await cl.Message(content=content).send()
+        res = await cl.AskActionMessage(content="", actions=actions).send()
         if res is None:
             return
         name = res.get("name", "")
@@ -490,6 +495,8 @@ async def _show_feedback(state: SessionState, eval_failed: bool = False):
     if eval_.simplified_version:
         content += f"**Simplified Version:** {eval_.simplified_version}"
 
+    await cl.Message(content=content).send()
+
     actions = []
     if eval_failed:
         actions.append(cl.Action(name="retry", payload={}, label="Retry Evaluation"))
@@ -497,9 +504,9 @@ async def _show_feedback(state: SessionState, eval_failed: bool = False):
         actions.append(cl.Action(name="_feedback_finish", payload={}, label="Finish"))
     else:
         actions.append(cl.Action(name="_feedback_next", payload={}, label="Next Question"))
-    actions.append(cl.Action(name="_feedback_end_early", payload={}, label="End Early"))
+        actions.append(cl.Action(name="_feedback_end_early", payload={}, label="End Early"))
 
-    res = await cl.AskActionMessage(content=content, actions=actions).send()
+    res = await cl.AskActionMessage(content="", actions=actions).send()
     if res is None:
         return
     name = res.get("name", "")
@@ -669,6 +676,33 @@ async def _run_interview_core():
                     await cl.Message(
                         content="That role doesn't appear to be IT-related. "
                         "Please enter a valid IT role (e.g. Backend Engineer, Data Scientist, DevOps Engineer)."
+                    ).send()
+                    continue
+                data[field] = val
+                break
+        elif field == "industry":
+            from industry_guardrail import validate_industry
+            while True:
+                res = await cl.AskUserMessage(content=ONBOARDING_PROMPTS[idx]).send()
+                if not res:
+                    data[field] = ""
+                    break
+                val = res["output"].strip()
+                if not val:
+                    await cl.Message(content="Please enter a value.").send()
+                    continue
+                try:
+                    is_valid = validate_industry(val)
+                except RuntimeError:
+                    await cl.Message(
+                        content="Industry validation is temporarily unavailable. "
+                        "Please try again."
+                    ).send()
+                    continue
+                if not is_valid:
+                    await cl.Message(
+                        content="Please enter an industry "
+                        "(for example: FinTech, Healthcare, Retail, Education)."
                     ).send()
                     continue
                 data[field] = val

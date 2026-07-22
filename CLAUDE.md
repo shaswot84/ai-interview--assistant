@@ -6,7 +6,7 @@ Personalised mock interview app powered by an OpenAI-compatible LLM. Built with 
 ## Stack
 - **Python 3.11** | **uv** (package manager)
 - **Chainlit** (UI framework)
-- **OpenAI SDK** (works with OpenAI, Groq, DeepSeek, etc.)
+- **OpenAI SDK** (works with OpenAI, Groq, DeepSeek, Ollama, etc.)
 - **Pydantic v2** (schemas/validation)
 - **Plotly** (radar chart)
 - **WeasyPrint** (PDF export)
@@ -19,6 +19,7 @@ Personalised mock interview app powered by an OpenAI-compatible LLM. Built with 
 - No bare `except:` — catch specific exceptions
 - One test file per module under `tests/`
 - `Evaluation.scores` is a `dict[str, int]` — dimensions are dynamic per question type (do not add fixed fields)
+- Onboarding uses two separate guardrails backed by the Ollama API: `validate_role()` (IT-role classification) and `validate_industry()` (industry-name classification)
 
 ## State Machine
 ```
@@ -27,18 +28,19 @@ IDLE → ONBOARDING → GENERATING → INTERVIEWING → EVALUATING → FEEDBACK 
 
 ## Key Commands
 ```bash
-uv run pytest tests/ -v           # Run all tests
-uv run pytest tests/test_X.py -v  # Run a specific test file
-uv run chainlit run app.py         # Start the app
-uv add <package>                   # Add a dependency
-uv sync                            # Sync environment
+uv run pytest tests/ -v                 # Run all tests
+uv run pytest tests/test_X.py -v        # Run a specific test file
+uv run chainlit run app.py               # Start the app
+uv add <package>                         # Add a dependency
+uv sync                                  # Sync environment
+uv run python -c "..."                   # Quick script
 ```
 
 ## Current Phase: 5 — Edge Cases, Testing & Polish
 
 ## Tests
 ```bash
-uv run pytest tests/ -v                 # 93 tests, all green
+uv run pytest tests/ -v                 # 97 tests, all green
 uv run pytest tests/ --runslow          # Include performance benchmarks (needs API key)
 ```
 
@@ -61,3 +63,21 @@ uv run pytest tests/ --runslow          # Include performance benchmarks (needs 
 - `OPENAI_BASE_URL` — optional, for custom endpoints
 - `OPENAI_MODEL` — optional, model name (default: `gpt-4o-mini`)
 - `QUESTION_TIMER_SECONDS` — answer timeout (default: 180)
+- `OLLAMA_API_KEY` — API key for the Ollama endpoint
+- `OLLAMA_BASE_URL` — optional, Ollama endpoint URL (default: `http://localhost:11434/v1`)
+- `OLLAMA_MODEL` — optional, Ollama model name (default: `llama3.2:3b`)
+
+## Key Modules
+| Module | Purpose |
+|--------|---------|
+| `config.py` | Env-based configuration |
+| `session_state.py` | State machine with guarded transitions |
+| `llm_client.py` | LLM calls for questions, evaluation, scorecard |
+| `providers.py` | OpenAI and Ollama client factories |
+| `industry_guardrail.py` | Industry-name classification via Ollama |
+| `scoring.py` | Score calculation and radar chart |
+| `prompts.py` | LLM prompt templates |
+| `export.py` | Markdown and PDF export |
+| `timer.py` | Per-question countdown timer |
+| `fallback_data.py` | Static questions when LLM is unavailable |
+| `schemas.py` | Pydantic v2 data models |

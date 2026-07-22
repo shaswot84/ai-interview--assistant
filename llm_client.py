@@ -1,5 +1,6 @@
 """LLM client — handles question generation, answer evaluation, and scorecard synthesis."""
 
+import logging
 import time
 from typing import TypeVar
 
@@ -43,11 +44,6 @@ class _ScorecardResponse(BaseModel):
     grade: str
 
 
-class _RoleValidationResponse(BaseModel):
-    """Response model for role validation."""
-    is_it_role: bool
-
-
 def _call_with_retry(
     messages: list[dict],
     response_model: type[T],
@@ -55,6 +51,7 @@ def _call_with_retry(
     temperature: float = 0.7,
 ) -> T:
     """Call the LLM with exponential backoff retry. Raises RuntimeError after exhaustion."""
+    logger = logging.getLogger(__name__)
     client = get_openai_client()
     last_error = None
     for attempt in range(max_retries):
@@ -66,6 +63,7 @@ def _call_with_retry(
                 temperature=temperature,
             )
             content = response.choices[0].message.content
+            logger.info("Groq raw response: %r", content)
             if content is None:
                 raise ValueError("Empty response from LLM")
             return response_model.model_validate_json(content)
@@ -77,24 +75,46 @@ def _call_with_retry(
 
 
 def validate_role(role: str) -> bool:
-    """Use the LLM to classify whether a given role is IT-related."""
+    """Use Ollama to classify whether a given role is IT-related."""
+    import json
+    import logging
+    import re
+    logger = logging.getLogger(__name__)
+    logger.info("validate_role input: %r", role)
+    from providers import get_ollama_client
+    client = get_ollama_client()
+    system_prompt = (
+        "You are a classifier that determines whether a job role is IT-related "
+        "(software engineering, data science, DevOps, IT support, product management in tech, etc.). "
+        "Respond with ONLY valid JSON. No other text, no explanation, no markdown formatting.\n\n"
+        "The response must be exactly one of the following (without backticks):\n"
+        '{"is_it_role": true}\n'
+        '{"is_it_role": false}'
+    )
     messages = [
-        {
-            "role": "system",
-            "content": (
-                "You are a classifier that determines whether a job role is IT-related "
-                "(software engineering, data science, DevOps, IT support, product management in tech, etc.). "
-                "Return a JSON object with a single boolean field `is_it_role`."
-            ),
-        },
-        {
-            "role": "user",
-            "content": f"Is the following job role IT-related? Role: {role}",
-        },
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": f"Is the following job role IT-related? Role: {role}"},
     ]
     try:
-        result = _call_with_retry(messages, _RoleValidationResponse, temperature=0)
-        return result.is_it_role
+        response = client.chat.completions.create(
+            model=config.ollama_model,
+            messages=messages,
+            temperature=0,
+        )
+        content = response.choices[0].message.content
+        logger.info("Ollama raw response for role: %r", content)
+        if content is None:
+            return True
+        try:
+            data = json.loads(content)
+            return bool(data["is_it_role"])
+        except (json.JSONDecodeError, KeyError, TypeError):
+            pass
+        m = re.search(r'"is_it_role"\s*:\s*(true|false)', content, re.IGNORECASE)
+        if m:
+            return m.group(1).lower() == "true"
+        logger.error("Failed to parse boolean for role from: %r", content)
+        return True
     except Exception:
         return True
 

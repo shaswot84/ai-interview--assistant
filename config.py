@@ -15,6 +15,9 @@ class Config:
     openai_api_key: str = ""
     openai_base_url: str = ""
     openai_model: str = "gpt-4o-mini"
+    ollama_api_key: str = ""
+    ollama_base_url: str = "http://localhost:11434/v1"
+    ollama_model: str = "llama3.2:3b"
     question_timer_seconds: int = 180
     generation_temperature: float = 0.9
     evaluation_temperature: float = 0.3
@@ -28,6 +31,9 @@ class Config:
             openai_api_key=os.getenv("OPENAI_API_KEY", ""),
             openai_base_url=os.getenv("OPENAI_BASE_URL", ""),
             openai_model=os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
+            ollama_api_key=os.getenv("OLLAMA_API_KEY", ""),
+            ollama_base_url=os.getenv("OLLAMA_BASE_URL", "http://localhost:11434/v1"),
+            ollama_model=os.getenv("OLLAMA_MODEL", "llama3.2:3b"),
             question_timer_seconds=int(os.getenv("QUESTION_TIMER_SECONDS", "180")),
             generation_temperature=float(os.getenv("GENERATION_TEMPERATURE", "0.9")),
             evaluation_temperature=float(os.getenv("EVALUATION_TEMPERATURE", "0.3")),

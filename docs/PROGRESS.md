@@ -92,3 +92,12 @@
 
 ### Blocked
 - None
+
+### Completed (Phase 5 — Follow-up 3)
+- [x] 2026-07-22: Added Ollama API config (`OLLAMA_API_KEY`, `OLLAMA_BASE_URL`, `OLLAMA_MODEL`) to `.env` and `config.py`
+- [x] 2026-07-22: Added `get_ollama_client()` in `providers.py` — OpenAI-compatible client for Ollama
+- [x] 2026-07-22: Replaced `validate_role()` LLM calls (Groq/OpenAI) with Ollama
+- [x] 2026-07-22: Created `industry_guardrail.py` — `validate_industry()` calls Ollama to classify industry names, returns `bool`, raises `RuntimeError` on API failure
+- [x] 2026-07-22: Wired industry guardrail into `app.py` onboarding loop — invalid → retry prompt, API error → "temporarily unavailable" → retry
+- [x] 2026-07-22: 97 tests total (all green); added `test_industry_guardrail.py` (7 tests)
+- [x] 2026-07-22: Updated all docs — CLAUDE.md, architecture.md, decisions.md (ADR-013), PROGRESS.md, TESTING.md, TROUBLESHOOTING.md, logs.md, .env.example

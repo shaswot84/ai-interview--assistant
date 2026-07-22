@@ -63,10 +63,24 @@
 - If the API call fails, `validate_role()` falls back to `True` (allow) — so failures should not block the flow
 - Try being more specific: "Backend Engineer" instead of just "Engineer"
 
+### Industry validation keeps rejecting my input
+- The Ollama classifier (`validate_industry()`) checks whether the input is a recognised industry name
+- Acceptable examples: FinTech, Healthcare, Education, Retail, Manufacturing, E-commerce
+- Rejected examples: job titles ("Backend Engineer"), random text ("banana", "I like pizza"), numbers
+- If the Ollama API is unreachable, the app shows "Industry validation is temporarily unavailable. Please try again." — check `OLLAMA_BASE_URL` and `OLLAMA_API_KEY` in `.env`
+
+### `KeyError: '\n  "clarity"'` or similar format errors
+
 ### `KeyError: '\n  "clarity"'` or similar format errors
 - The `EVALUATION_PROMPT` contains literal JSON braces `{`/`}` that must be escaped as `{{`/`}}` for Python's `str.format()`
 - Check that all non-placeholder braces in prompt templates are doubled
 - `QUESTION_GEN_PROMPT` already uses `{{`/`}}` — follow that pattern when editing other prompts
+
+### Ollama
+- Base URL: `http://localhost:11434/v1` (local) or a hosted OpenAI-compatible endpoint
+- Models: `llama3.2:3b`, `llama3.1:8b`, `mistral`, etc.
+- API key: configurable via `OLLAMA_API_KEY`; local Ollama may accept any non-empty string
+- Key format: depends on the endpoint provider
 
 ## Debugging Tips
 - Set `QUESTION_TIMER_SECONDS=9999` during development to prevent timeouts
