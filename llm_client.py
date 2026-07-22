@@ -9,7 +9,15 @@ from pydantic import BaseModel
 
 from config import config
 from fallback_data import fallback_questions
-from prompts import FOLLOW_UP_PROMPT, INTERVIEWER_STYLE_PERSONAS, SCORECARD_PROMPT, get_evaluation_prompt, get_question_prompt
+from prompts import (
+    FOLLOW_UP_PROMPT,
+    INTERVIEWER_STYLE_PERSONAS,
+    SCORECARD_PROMPT,
+    get_evaluation_prompt,
+    get_feedback_prompt,
+    get_question_prompt,
+    get_strict_evaluation_prompt,
+)
 from providers import get_openai_client
 from schemas import Evaluation, Question, QuestionConfig, QuestionType, Scorecard, SessionState, UserProfile
 
@@ -47,6 +55,25 @@ class _ScorecardResponse(BaseModel):
 class _FollowUpResponse(BaseModel):
     """Internal Pydantic model for follow-up question generation."""
     follow_up: str
+
+
+class _StrictEvaluationResponse(BaseModel):
+    """Internal Pydantic model for Stage 1 strict scoring.
+
+    Accepts arbitrary extra fields as dimension scores, reasons, and evidence.
+    """
+    model_config = {"extra": "allow"}
+    hiring_decision: str
+    confidence: float = 1.0
+
+
+class _FeedbackResponse(BaseModel):
+    """Internal Pydantic model for Stage 2 feedback generation."""
+    strengths: list[str]
+    weaknesses: list[str]
+    grammar_correction: str
+    simplified_version: str
+    actionable_feedback: str
 
 
 def _call_with_retry(
@@ -187,20 +214,16 @@ def _evaluate_objective(question: Question, answer: str) -> Evaluation:
     )
 
 
-def _evaluate_llm(
+def _evaluate_llm_strict(
     question: Question,
     answer: str,
     profile: UserProfile,
-) -> Evaluation:
-    """LLM-based evaluation for free-response question types.
-
-    Passes the question type to the prompt so it returns only relevant
-    dimensions. Scores are clamped to the 1-10 range before returning.
-    """
+) -> tuple[dict[str, int], dict[str, str], dict[str, str], str, float]:
+    """Stage 1 — Strict scoring. Returns (scores, score_reasons, score_evidence, hiring_decision, confidence)."""
     messages = [
         {
             "role": "system",
-            "content": get_evaluation_prompt(
+            "content": get_strict_evaluation_prompt(
                 question.text, answer, profile,
                 question_type=question.question_type.value,
             ),
@@ -210,32 +233,87 @@ def _evaluate_llm(
             "content": f"Evaluate this answer to: {question.text}",
         },
     ]
-    result = _call_with_retry(messages, _EvaluationResponse, temperature=config.evaluation_temperature)
+    result = _call_with_retry(messages, _StrictEvaluationResponse, temperature=config.evaluation_temperature)
 
-    # Extract dimension scores, score_reasons, and confidence from response fields
-    KNOWN_FIELDS = {"strengths", "weaknesses", "grammar_correction", "simplified_version", "actionable_feedback", "confidence"}
+    KNOWN_FIELDS = {"hiring_decision", "confidence"}
     scores: dict[str, int] = {}
     score_reasons: dict[str, str] = {}
+    score_evidence: dict[str, str] = {}
     confidence: float = 1.0
+
     for key, val in result.model_dump().items():
         if key in KNOWN_FIELDS:
             if key == "confidence" and isinstance(val, (int, float)):
                 confidence = max(0.0, min(1.0, float(val)))
             continue
-        if key.endswith("_reason") and isinstance(val, str):
+        if key.endswith("_evidence") and isinstance(val, str):
+            score_evidence[key] = val
+        elif key.endswith("_reason") and isinstance(val, str):
             score_reasons[key] = val
         elif isinstance(val, (int, float)):
             scores[key] = max(1, min(10, int(val)))
 
+    return scores, score_reasons, score_evidence, result.hiring_decision, confidence
+
+
+def _generate_feedback(
+    question: Question,
+    scores_json: str,
+) -> _FeedbackResponse | None:
+    """Stage 2 — Feedback generation. Returns None if the LLM call fails."""
+    messages = [
+        {"role": "system", "content": get_feedback_prompt(scores_json)},
+        {
+            "role": "user",
+            "content": f"Generate feedback for this answer to: {question.text}",
+        },
+    ]
+    try:
+        return _call_with_retry(messages, _FeedbackResponse, temperature=config.evaluation_temperature)
+    except Exception:
+        return None
+
+
+def _evaluate_llm(
+    question: Question,
+    answer: str,
+    profile: UserProfile,
+) -> Evaluation:
+    """Two-stage LLM evaluation for free-response question types.
+
+    Stage 1 — Strict scoring with mandatory score caps, evidence requirements,
+    and hiring decision. Returns scores, reasons, evidence, and confidence.
+    Stage 2 — Helpful feedback generation (strengths, weaknesses, grammar,
+    simplified version, actionable feedback). Uses Stage 1 scores as context.
+    """
+    scores, score_reasons, score_evidence, hiring_decision, confidence = _evaluate_llm_strict(
+        question, answer, profile,
+    )
+
+    # Build Stage 1 JSON summary for the feedback prompt
+    stage1_lines = []
+    for dim in scores:
+        score_str = f'"{dim}": {scores[dim]}'
+        reason_key = f"{dim}_reason"
+        evidence_key = f"{dim}_evidence"
+        score_str += f', "{reason_key}": "{score_reasons.get(reason_key, "")}"'
+        score_str += f', "{evidence_key}": "{score_evidence.get(evidence_key, "")}"'
+        stage1_lines.append("  " + score_str)
+    stage1_json = "{\n" + "\n".join(stage1_lines) + f'\n  "hiring_decision": "{hiring_decision}",\n  "confidence": {confidence}\n}}'
+
+    feedback = _generate_feedback(question, stage1_json)
+
     return Evaluation(
         scores=scores,
         score_reasons=score_reasons,
+        score_evidence=score_evidence,
+        hiring_decision=hiring_decision,
         confidence=confidence,
-        strengths=result.strengths,
-        weaknesses=result.weaknesses,
-        grammar_correction=result.grammar_correction,
-        simplified_version=result.simplified_version,
-        actionable_feedback=result.actionable_feedback,
+        strengths=feedback.strengths if feedback else [],
+        weaknesses=feedback.weaknesses if feedback else [],
+        grammar_correction=feedback.grammar_correction if feedback else "",
+        simplified_version=feedback.simplified_version if feedback else "",
+        actionable_feedback=feedback.actionable_feedback if feedback else "Coaching unavailable.",
     )
 
 

@@ -546,10 +546,46 @@ Seniority:
 {injection_guard}
 """
 
+_EVALUATION_STRICT_SYSTEM_PROMPT = """
+You are a strict technical interviewer making a hiring decision.
+Your ONLY job is to assign accurate, conservative scores.
+You are NOT a tutor, coach, or mentor. You are a gatekeeper.
+
+Question:
+{question}
+
+Answer:
+{answer}
+
+Question Type:
+{question_type}
+
+Role:
+{role}
+
+Seniority:
+{seniority}
+
+{evaluation_persona}
+
+{question_type_guidance}
+
+{injection_guard}
+"""
+
 _EVALUATION_GENERAL_RULES = """
 ====================================================
 GENERAL EVALUATION RULES
 ====================================================
+
+START EVERY DIMENSION AT 1.
+
+You are NOT assuming competence. Scores are EARNED by explicit evidence in the answer.
+Only increase a score when the answer demonstrates the concept clearly and concretely.
+If you hesitate between two scores, pick the LOWER one.
+
+Do NOT reward: effort, confidence, verbosity, politeness, partially-correct statements.
+Do NOT infer knowledge. If it's not explicitly stated, it does not exist.
 
 Evaluate ONLY the candidate's answer.
 
@@ -588,43 +624,32 @@ Examples:
 
 _EVALUATION_RUBRIC = """
 ====================================================
-SCORING CALIBRATION
+SCORING ANCHORS
 ====================================================
 
-Use the following interpretation consistently.
+10 — Exceptional. Complete, correct, covers trade-offs, edge cases, alternatives,
+     failure modes, and production considerations. Cites concrete experience.
+     STRONG HIRE.
 
-10
-Exceptional. Better than nearly all candidates for this level.
-Strong hire.
+9  — Excellent. One minor omission from a 10. HIRE.
 
-9
-Excellent. Meets expectations with only minor omissions.
+8  — Strong. Correct with a few important omissions. HIRE.
 
-8
-Strong. Clearly meets expectations.
+7  — Good. Mostly correct but missing important depth for this seniority. LEAN HIRE.
 
-7
-Good but missing important details.
+6  — Borderline. Basic understanding only. Would pass at a LOWER seniority.
+     LEAN NO HIRE.
 
-6
-Borderline.
-Technically correct but lacks several expectations for this level.
+5  — Weak. Partial understanding, significant gaps. NO HIRE.
 
-5
-Basic understanding only.
-Would be acceptable for a LOWER seniority.
+4  — Poor. Major knowledge gaps. Answer is directionally related but
+     substantively wrong or empty. NO HIRE.
 
-4
-Significant knowledge gaps.
+3  — Very poor. Mostly incorrect or irrelevant. STRONG NO HIRE.
 
-3
-Weak.
+2  — Severely incorrect. Fundamental misunderstandings. STRONG NO HIRE.
 
-2
-Very weak.
-
-1
-Incorrect or largely irrelevant.
+1  — Completely wrong, irrelevant, or no answer. STRONG NO HIRE.
 
 Do NOT inflate scores.
 
@@ -698,6 +723,158 @@ Do not explain your reasoning.
 Do not include any additional text.
 """
 
+_MANDATORY_SCORE_CAPS = """
+====================================================
+MANDATORY SCORE CAPS — enforce before assigning ANY score
+====================================================
+
+- Factually incorrect claim → correctness ≤ 3, one additional point deducted per false claim
+- Answer does not address the question → relevance ≤ 3
+- Buzzwords without explanation of WHY they apply → technical_depth ≤ 4
+- Generic answer lacking specifics or examples → completeness ≤ 5
+- Primary requirement of the question missed entirely → ALL technical dimensions ≤ 4
+- Coding solution would not compile/run → correctness ≤ 3
+- Debugging fix does not actually fix the bug → correctness 1-3
+- System design answer with zero trade-off discussion → tradeoff_analysis ≤ 5
+- STAR missing in behavioral answer → completeness ≤ 6
+"""
+
+_HIRING_DECISION_SECTION = """
+====================================================
+HIRING DECISION
+====================================================
+
+Before assigning numeric scores, determine:
+- Strong Hire / Hire / Lean Hire / Lean No Hire / No Hire / Strong No Hire
+
+This decision MUST be consistent with the numeric scores that follow.
+When you finish scoring, verify that the scores match the hiring decision.
+If they don't, revise the scores downward.
+"""
+
+_EVIDENCE_REQUIREMENT_SECTION = """
+====================================================
+EVIDENCE REQUIREMENT
+====================================================
+
+For EVERY score >= 8, you MUST include the exact quote from the candidate's answer
+that justifies it in the "{{dim}}_evidence" field.
+
+If you cannot find a specific quote, that dimension CANNOT be >= 8.
+Write "No supporting evidence found." and reduce the score to <= 6.
+"""
+
+_INTERNAL_CONSISTENCY_SECTION = """
+====================================================
+INTERNAL CONSISTENCY
+====================================================
+
+- If correctness <= 3, no other technical dimension may exceed 5.
+- If relevance <= 3, no other dimension may exceed 5.
+- If >= 2 dimensions are <= 5, overall quality cannot exceed 6.
+- All dimension scores must reflect the same hiring decision tier.
+"""
+
+_STRICT_SELF_VERIFICATION = """
+====================================================
+SELF-VERIFICATION (before returning JSON)
+====================================================
+
+1. Are incorrect claims reflected in the correctness score? If not, lower it.
+2. Is missing senior-level depth penalized? If not, lower technical_depth.
+3. Are scores internally consistent (no high score next to a low correctness)?
+4. Does the hiring decision match the numeric scores?
+5. Is every score >= 8 supported by explicit evidence in the evidence field?
+6. Are any dimensions unjustifiably high? If uncertain, reduce them.
+
+If any check fails, revise scores BEFORE returning the JSON.
+"""
+
+_EVALUATION_STRICT_OUTPUT_SCHEMA = """
+====================================================
+RETURN FORMAT
+====================================================
+
+Return ONLY valid JSON.
+
+{{
+{type_output_fields}
+  "hiring_decision": "No Hire"
+}}
+
+In addition to the fields above, for EVERY dimension you MUST include:
+- "{{dim}}_evidence": str (exact quote from answer that justifies the score, or "No supporting evidence found.")
+
+Return ONLY the JSON object.
+
+Do not use Markdown.
+
+Do not explain your reasoning.
+
+Do not include any additional text.
+"""
+
+_EVALUATION_CALIBRATION_EXAMPLES = """
+====================================================
+CALIBRATION EXAMPLES — use these as your scoring baseline
+====================================================
+
+EXAMPLE 1 — Excellent (9-10)
+Question: "How would you design a rate limiter?"
+Answer: "I'd use a token bucket algorithm with Redis for distributed state.
+For a single-node setup, an in-memory sliding window log works. Key trade-offs:
+token bucket allows bursts, sliding window is smoother but uses more memory.
+In production I'd add: atomic Lua scripts for Redis, a fallback to local limiting
+if Redis is unavailable, and Prometheus metrics on rejections vs. accepts.
+At 100K req/s, you'd need sharded Redis with consistent hashing."
+Scores: correctness=10, technical_depth=10, tradeoff_analysis=10, problem_solving=9, completeness=9
+Why: Complete algorithm choice with rationale, trade-offs explicit, production concerns addressed, scale discussed.
+
+EXAMPLE 2 — Generic (4-5)
+Question: "How would you design a rate limiter?"
+Answer: "I would implement rate limiting at the API gateway. The system would
+track how many requests each user makes and block them when they go over their
+limit. I'd store the counters in a database so they persist across restarts.
+This is a common pattern used by many companies."
+Scores: correctness=5, technical_depth=3, tradeoff_analysis=2, problem_solving=4, completeness=4
+Why: No algorithm named, no data structure chosen, no trade-offs discussed,
+no failure modes considered, no scale addressed. Vague hand-waving.
+
+EXAMPLE 3 — Wrong (1-3)
+Question: "How would you design a rate limiter?"
+Answer: "Just use a sleep() call for each request. If a user sends too many
+requests, put them in a queue and process one per second. The queue will handle
+any number of users because queues are unbounded."
+Scores: correctness=2, technical_depth=1, tradeoff_analysis=1, problem_solving=2, completeness=2
+Why: Unbounded queues cause OOM, sleep() blocks the thread, no data structure,
+no understanding of rate limiting concepts. Fundamentally incorrect approach.
+"""
+
+_FEEDBACK_PROMPT = """You are a helpful interview coach. Based on the evaluation below, generate coaching output.
+
+Evaluation:
+{stage1_json}
+
+Provide:
+- strengths: Exactly THREE concise strengths
+- weaknesses: Exactly THREE concise weaknesses
+- grammar_correction: Rewrite the answer using proper grammar while preserving meaning
+- simplified_version: Rewrite the answer into a concise interview-ready response
+- actionable_feedback: Provide specific advice explaining WHAT is missing and HOW to improve
+
+Return ONLY a valid JSON object with this structure:
+{{
+  "strengths": ["...", "...", "..."],
+  "weaknesses": ["...", "...", "..."],
+  "grammar_correction": "...",
+  "simplified_version": "...",
+  "actionable_feedback": "..."
+}}
+
+Do not use Markdown.
+Do not include any additional text.
+"""
+
 EVALUATION_PROMPT = (
     _EVALUATION_SYSTEM_PROMPT
     + _EVALUATION_GENERAL_RULES
@@ -714,6 +891,28 @@ Do NOT add or remove dimensions.
 """
     + _EVALUATION_FEEDBACK_INSTRUCTIONS
     + _EVALUATION_OUTPUT_SCHEMA
+)
+
+EVALUATION_STRICT_PROMPT = (
+    _EVALUATION_STRICT_SYSTEM_PROMPT
+    + _EVALUATION_GENERAL_RULES
+    + _EVALUATION_RUBRIC
+    + _MANDATORY_SCORE_CAPS
+    + _HIRING_DECISION_SECTION
+    + _EVIDENCE_REQUIREMENT_SECTION
+    + _INTERNAL_CONSISTENCY_SECTION
+    + """
+====================================================
+SCORING DIMENSIONS
+====================================================
+
+Evaluate ONLY the dimensions listed below for this question type.
+Do NOT add or remove dimensions.
+
+{type_dimensions}
+"""
+    + _STRICT_SELF_VERIFICATION
+    + _EVALUATION_STRICT_OUTPUT_SCHEMA
 )
 
 SCORECARD_PROMPT = """You are an interviewer synthesizing a final scorecard for a candidate.
@@ -845,3 +1044,32 @@ def get_evaluation_prompt(question: str, answer: str, profile, question_type: st
         feedback_instructions=_EVALUATION_FEEDBACK_INSTRUCTIONS,
         type_output_fields=output_fields,
     )
+
+
+def get_strict_evaluation_prompt(question: str, answer: str, profile, question_type: str = "open_ended") -> str:
+    """Build the strict evaluation prompt (Stage 1) — scores only, no coaching."""
+    key = profile.seniority.name.lower()
+    qtype = question_type.replace("_", " ").title()
+    guidance = QUESTION_TYPE_GUIDANCE.get(question_type, "")
+    dims = TYPE_DIMENSIONS.get(question_type, TYPE_DIMENSIONS["open_ended"])
+
+    dim_lines = [f"{dim} ({desc}) — Score 1-10" for dim, desc in dims.items()]
+    type_dimensions_str = "\n".join(dim_lines)
+
+    return EVALUATION_STRICT_PROMPT.format(
+        question=question,
+        answer=answer,
+        question_type=qtype,
+        role=profile.role,
+        seniority=profile.seniority.value,
+        evaluation_persona=EVALUATION_PERSONAS.get(key, ""),
+        question_type_guidance=guidance,
+        injection_guard=INJECTION_GUARD,
+        type_dimensions=type_dimensions_str,
+        type_output_fields=TYPE_OUTPUT_FIELDS.get(question_type, TYPE_OUTPUT_FIELDS["open_ended"]),
+    )
+
+
+def get_feedback_prompt(stage1_json: str) -> str:
+    """Build the feedback prompt (Stage 2) — coaching only, no scoring."""
+    return _FEEDBACK_PROMPT.format(stage1_json=stage1_json)

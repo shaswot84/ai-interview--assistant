@@ -119,6 +119,8 @@ class Evaluation(BaseModel):
     """Scores for a single answer — dynamic dimensions per question type."""
     scores: dict[str, int]
     score_reasons: dict[str, str] = Field(default_factory=dict)
+    score_evidence: dict[str, str] = Field(default_factory=dict)
+    hiring_decision: str = ""
     confidence: float = Field(default=1.0, ge=0.0, le=1.0)
     strengths: list[str]
     weaknesses: list[str]

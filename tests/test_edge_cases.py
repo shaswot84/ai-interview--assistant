@@ -8,6 +8,8 @@ from openai import APIError, RateLimitError
 
 from llm_client import (
     _EvaluationResponse,
+    _FeedbackResponse,
+    _StrictEvaluationResponse,
     QuestionsResponse,
     _call_with_retry,
     evaluate_answer,
@@ -54,12 +56,16 @@ class TestInjectionResistance:
 
     @patch("llm_client._call_with_retry")
     def test_out_of_range_scores_are_clamped(self, mock_call):
-        mock_call.return_value = _EvaluationResponse(
-            strengths=[], weaknesses=[],
-            grammar_correction="", simplified_version="", actionable_feedback="",
+        stage1 = _StrictEvaluationResponse(
+            hiring_decision="No Hire",
             clarity=100, completeness=-5, relevance=999,
             correctness=50, problem_solving=200, tradeoff_analysis=0,
         )
+        stage2 = _FeedbackResponse(
+            strengths=[], weaknesses=[],
+            grammar_correction="", simplified_version="", actionable_feedback="",
+        )
+        mock_call.side_effect = [stage1, stage2]
         result = evaluate_answer(A_QUESTION, "malicious answer", A_PROFILE)
         assert result.scores["clarity"] == 10
         assert result.scores["completeness"] == 1
@@ -74,12 +80,16 @@ class TestInjectionResistance:
 
     @patch("llm_client._call_with_retry")
     def test_legitimate_scores_unchanged(self, mock_call):
-        mock_call.return_value = _EvaluationResponse(
-            strengths=["A", "B", "C"], weaknesses=["D", "E", "F"],
-            grammar_correction="x", simplified_version="y", actionable_feedback="z",
+        stage1 = _StrictEvaluationResponse(
+            hiring_decision="Hire",
             clarity=3, completeness=4, relevance=5,
             correctness=8, problem_solving=9, tradeoff_analysis=4,
         )
+        stage2 = _FeedbackResponse(
+            strengths=["A", "B", "C"], weaknesses=["D", "E", "F"],
+            grammar_correction="x", simplified_version="y", actionable_feedback="z",
+        )
+        mock_call.side_effect = [stage1, stage2]
         result = evaluate_answer(A_QUESTION, "good answer", A_PROFILE)
         assert result.scores["clarity"] == 3
         assert result.scores["completeness"] == 4

@@ -6,8 +6,10 @@ import pytest
 
 from llm_client import (
     _EvaluationResponse,
+    _FeedbackResponse,
     _FollowUpResponse,
     _ScorecardResponse,
+    _StrictEvaluationResponse,
     QuestionsResponse,
     _call_with_retry,
     evaluate_answer,
@@ -182,13 +184,10 @@ class TestEvaluateAnswer:
     """evaluate_answer — validates the returned Evaluation object."""
     @patch("llm_client._call_with_retry")
     def test_returns_evaluation(self, mock_call):
-        mock_call.return_value = _EvaluationResponse(
-            strengths=["Clear", "Structured", "Relevant"],
-            weaknesses=["Depth", "Trade-offs", "Grammar"],
-            grammar_correction="Fixed.",
-            simplified_version="Simple.",
-            actionable_feedback="More detail.",
-            # Extra fields → dimension scores
+        # Stage 1 — strict scoring
+        stage1 = _StrictEvaluationResponse(
+            hiring_decision="Hire",
+            confidence=0.85,
             clarity=8,
             clarity_reason="Explained concepts clearly but missed details.",
             completeness=7,
@@ -198,9 +197,16 @@ class TestEvaluateAnswer:
             technical_depth=7,
             problem_solving=8,
             tradeoff_analysis=6,
-            # Confidence
-            confidence=0.85,
         )
+        # Stage 2 — feedback
+        stage2 = _FeedbackResponse(
+            strengths=["Clear", "Structured", "Relevant"],
+            weaknesses=["Depth", "Trade-offs", "Grammar"],
+            grammar_correction="Fixed.",
+            simplified_version="Simple.",
+            actionable_feedback="More detail.",
+        )
+        mock_call.side_effect = [stage1, stage2]
         result = evaluate_answer(A_QUESTION, "My answer", A_PROFILE)
         assert isinstance(result, Evaluation)
         assert result.scores["clarity"] == 8
@@ -208,6 +214,7 @@ class TestEvaluateAnswer:
         assert result.score_reasons["clarity_reason"] == "Explained concepts clearly but missed details."
         assert result.score_reasons["completeness_reason"] == "Covered main points but omitted edge cases."
         assert result.confidence == 0.85
+        assert result.hiring_decision == "Hire"
         assert result.strengths == ["Clear", "Structured", "Relevant"]
 
 
