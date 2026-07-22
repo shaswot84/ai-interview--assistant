@@ -17,6 +17,7 @@ from schemas import (
     Evaluation,
     Question,
     QuestionCategory,
+    QuestionType,
     Scorecard,
     Seniority,
     SessionState,
@@ -164,6 +165,67 @@ class TestEvaluateAnswer:
         assert result.clarity == 8
         assert result.technical_depth == 7
         assert result.strengths == ["Clear", "Structured", "Relevant"]
+
+
+class TestEvaluateAnswerDeterministic:
+    """Deterministic evaluation for MCQ and Yes/No question types."""
+
+    def test_mcq_correct_answer(self):
+        q = Question(
+            id="q1", text="What is 2+2?", category=QuestionCategory.TECHNICAL,
+            question_type=QuestionType.MCQ, correct_answer="4",
+        )
+        result = evaluate_answer(q, "4", A_PROFILE)
+        assert isinstance(result, Evaluation)
+        assert result.clarity == 10
+        assert result.actionable_feedback == "Correct."
+        assert result.strengths == ["Correct answer"]
+
+    def test_mcq_wrong_answer(self):
+        q = Question(
+            id="q2", text="What is 2+2?", category=QuestionCategory.TECHNICAL,
+            question_type=QuestionType.MCQ, correct_answer="4",
+        )
+        result = evaluate_answer(q, "5", A_PROFILE)
+        assert result.clarity == 1
+        assert "Incorrect" in result.actionable_feedback
+        assert "4" in result.actionable_feedback
+        assert result.weaknesses == ["Incorrect answer"]
+
+    def test_mcq_case_insensitive(self):
+        q = Question(
+            id="q3", text="What is REST?", category=QuestionCategory.TECHNICAL,
+            question_type=QuestionType.MCQ, correct_answer="Representational State Transfer",
+        )
+        result = evaluate_answer(q, "representational state transfer", A_PROFILE)
+        assert result.clarity == 10
+        assert result.actionable_feedback == "Correct."
+
+    def test_yes_no_correct(self):
+        q = Question(
+            id="q4", text="Is Python interpreted?", category=QuestionCategory.TECHNICAL,
+            question_type=QuestionType.YES_NO, correct_answer="Yes",
+        )
+        result = evaluate_answer(q, "Yes", A_PROFILE)
+        assert result.clarity == 10
+        assert result.actionable_feedback == "Correct."
+
+    def test_yes_no_wrong(self):
+        q = Question(
+            id="q5", text="Is Python interpreted?", category=QuestionCategory.TECHNICAL,
+            question_type=QuestionType.YES_NO, correct_answer="Yes",
+        )
+        result = evaluate_answer(q, "No", A_PROFILE)
+        assert result.clarity == 1
+        assert "Incorrect" in result.actionable_feedback
+
+    def test_mcq_no_correct_answer_falls_back_to_empty(self):
+        q = Question(
+            id="q6", text="Test", category=QuestionCategory.TECHNICAL,
+            question_type=QuestionType.MCQ, correct_answer=None,
+        )
+        result = evaluate_answer(q, "anything", A_PROFILE)
+        assert result.clarity == 1  # None stripped to "" doesn't match "anything"
 
 
 class TestSynthesizeScorecard:

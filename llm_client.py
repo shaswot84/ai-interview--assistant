@@ -10,7 +10,7 @@ from config import config
 from fallback_data import fallback_questions
 from prompts import SCORECARD_PROMPT, get_evaluation_prompt, get_question_prompt
 from providers import get_openai_client
-from schemas import Evaluation, Question, QuestionConfig, Scorecard, SessionState, UserProfile
+from schemas import Evaluation, Question, QuestionConfig, QuestionType, Scorecard, SessionState, UserProfile
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -132,7 +132,48 @@ def evaluate_answer(
     answer: str,
     profile: UserProfile,
 ) -> Evaluation:
-    """Evaluate a single answer across five dimensions and return an Evaluation.
+    """Evaluate a single answer.
+    
+    Dispatches to deterministic evaluation for objective question types
+    (mcq, yes_no) and LLM-based evaluation for free-response types.
+    """
+    if question.question_type in (QuestionType.MCQ, QuestionType.YES_NO):
+        return _evaluate_objective(question, answer)
+    return _evaluate_llm(question, answer, profile)
+
+
+def _evaluate_objective(question: Question, answer: str) -> Evaluation:
+    """Deterministic evaluation for MCQ and Yes/No questions."""
+    expected = str(question.correct_answer).strip().lower() if question.correct_answer is not None else ""
+    given = answer.strip().lower()
+    correct = expected == given
+    if correct:
+        return Evaluation(
+            clarity=10, completeness=10, relevance=10, grammar=10, impact=10,
+            technical_depth=10, architecture_design=10, problem_solving=10, tradeoff_analysis=10,
+            strengths=["Correct answer"],
+            weaknesses=[],
+            grammar_correction="",
+            simplified_version="",
+            actionable_feedback=f"Correct.",
+        )
+    return Evaluation(
+        clarity=1, completeness=1, relevance=1, grammar=1, impact=1,
+        technical_depth=1, architecture_design=1, problem_solving=1, tradeoff_analysis=1,
+        strengths=[],
+        weaknesses=["Incorrect answer"],
+        grammar_correction="",
+        simplified_version="",
+        actionable_feedback=f"Incorrect. The correct answer is {question.correct_answer}.",
+    )
+
+
+def _evaluate_llm(
+    question: Question,
+    answer: str,
+    profile: UserProfile,
+) -> Evaluation:
+    """LLM-based evaluation for free-response question types.
     
     Scores are clamped to the 1-10 range before returning.
     """
@@ -180,7 +221,11 @@ def _format_transcript(state: SessionState) -> str:
                 f"Completeness: {eval_.completeness}/10, "
                 f"Relevance: {eval_.relevance}/10, "
                 f"Grammar: {eval_.grammar}/10, "
-                f"Impact: {eval_.impact}/10"
+                f"Impact: {eval_.impact}/10, "
+                f"Technical Depth: {eval_.technical_depth}/10, "
+                f"Architecture Design: {eval_.architecture_design}/10, "
+                f"Problem Solving: {eval_.problem_solving}/10, "
+                f"Trade-off Analysis: {eval_.tradeoff_analysis}/10"
             )
         lines.append("")
     return "\n".join(lines)

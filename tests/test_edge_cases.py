@@ -20,6 +20,7 @@ from schemas import (
     LetterGrade,
     Question,
     QuestionCategory,
+    QuestionType,
     Seniority,
     SessionState,
     UserProfile,
