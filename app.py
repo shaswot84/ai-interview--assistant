@@ -70,27 +70,27 @@ def _build_question_settings() -> cl.ChatSettings:
             ),
             cl.input_widget.Slider(
                 id="pct_open_ended", label="Technical Open-ended %", initial=30, min=0, max=100,
-                description="Open-ended technical questions.",
+                description="Percentages are normalised to sum to 100%.",
             ),
             cl.input_widget.Slider(
                 id="pct_behavioral", label="Behavioral (STAR) %", initial=20, min=0, max=100,
-                description="Behavioral questions expecting STAR-format answers.",
+                description="Percentages are normalised to sum to 100%.",
             ),
             cl.input_widget.Slider(
                 id="pct_mcq", label="Multiple Choice %", initial=15, min=0, max=100,
-                description="Multiple choice questions.",
+                description="Percentages are normalised to sum to 100%.",
             ),
             cl.input_widget.Slider(
                 id="pct_coding", label="Coding %", initial=10, min=0, max=100,
-                description="Coding questions.",
+                description="Percentages are normalised to sum to 100%.",
             ),
             cl.input_widget.Slider(
                 id="pct_debugging", label="Debugging %", initial=10, min=0, max=100,
-                description="Code debugging questions.",
+                description="Percentages are normalised to sum to 100%.",
             ),
             cl.input_widget.Slider(
                 id="pct_system_design", label="System Design %", initial=15, min=0, max=100,
-                description="System design / scenario-based questions.",
+                description="Percentages are normalised to sum to 100%.",
             ),
         ]
     )
@@ -573,6 +573,13 @@ async def on_settings_update(settings: dict):
     """Capture question configuration changes from the settings panel."""
     config = _settings_to_config(settings)
     cl.user_session.set("question_config", config)
+    counts = config.counts()
+    summary = " | ".join(
+        f"{qt.value}: {n}" for qt, n in sorted(counts.items(), key=lambda x: -x[1])
+    )
+    await cl.Message(
+        content=f"Updated question mix — {summary}",
+    ).send()
 
 
 @cl.on_chat_start
