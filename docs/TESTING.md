@@ -16,7 +16,7 @@ uv run pytest -k "test_name" -v      # Single test
 | `test_state_machine.py` | Valid/invalid transitions, timer auto-skip, edge cases | 1 |
 | `test_schemas.py` | Pydantic validation (invalid seniority, out-of-bounds scores) | 1 |
 | `test_providers.py` | OpenAI client returns valid JSON | 2 |
-| `test_llm_client.py` | Question generation, fallback, evaluation, injection resistance | 2 |
+| `test_llm_client.py` | Question generation, fallback, evaluation, deterministic dispatch, MCQ/Yes/No scoring | 2 + 5 |
 | `test_scoring.py` | Weighted scores, overall average, letter grades, radar data | 3 |
 | `test_export.py` | Markdown format, PDF file creation | 3 |
 | `test_edge_cases.py` | Injection resistance, score clamping, retry exhaustion, malformed JSON, RateLimitError, session isolation, all-skipped, fallback ratio | 4 + 5 |
@@ -27,8 +27,9 @@ uv run pytest -k "test_name" -v      # Single test
 - Timer: zero start, running, expired
 - Schemas: valid data passes, invalid data rejected
 - LLM: success path, retry path, fallback path, injection path
-- Scoring: each weight, skipped exclusion, grade boundaries
+- Scoring: equal-weighted average, multi-dimension mixing, grade boundaries
 - Export: file created, content well-formed
+- Deterministic evaluation: MCQ correct/wrong, Yes/No, case-insensitive, null answer
 - Edge cases: out-of-range scores clamped, null LLM content handled, retry exhaustion raises, fallback question ratio correct, RateLimitError caught, session isolation
 - Performance: latency targets (<3s per LLM call) when API key is available
 
@@ -50,6 +51,10 @@ uv run pytest -k "test_name" -v      # Single test
 | Fallback on failure | API returns 500 | Static questions returned |
 | Letter grade | score=85 | "B" |
 | Skipped question | answer=None | Excluded from average |
+| MCQ correct | answer="4", correct_answer="4" | `scores["correctness"] == 10` |
+| MCQ wrong | answer="5", correct_answer="4" | `scores["correctness"] == 1` |
+| MCQ case-insensitive | answer="rest", correct_answer="REST" | `scores["correctness"] == 10` |
+| Dynamic scores | Different question types | Only relevant dimensions present in `scores` dict |
 
 ## Known Flaky Tests
 - None yet

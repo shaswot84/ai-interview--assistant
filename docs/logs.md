@@ -199,3 +199,35 @@
 - **Test count:** 84 total (all green; 1 performance test flaky due to API latency)
 - Updated docs — `architecture.md`, `PROGRESS.md`, `bugs.md`, `logs.md`
 - **Status:** Phase 5 interactive question support complete
+
+## Phase 5 — Deterministic Evaluation for Objective Types (2026-07-22)
+- **Dispatch pattern:** `evaluate_answer()` now dispatches by `question.question_type` — `mcq`/`yes_no` → `_evaluate_objective()`, all others → `_evaluate_llm()` (unchanged)
+- **Deterministic evaluation:** `_evaluate_objective()` compares answer vs `question.correct_answer` case-insensitively; returns all scores = 10 (correct) or all scores = 1 (incorrect) with feedback in `actionable_feedback`
+- `_format_transcript()` expanded to show all 9 score dimensions
+- **Test count:** 90 total (added 6 deterministic tests; 1 performance flake)
+- Updated docs — `architecture.md`, `PROGRESS.md`, `bugs.md`, `logs.md`, `DEMO.md`, `CLAUDE.md`
+
+## Phase 5 — Dynamic Per-Type Evaluation Dimensions (2026-07-22)
+- **`Evaluation.scores` refactored** from 9 fixed fields to `dict[str, int]` — each question type defines its own relevant dimensions
+- **Removed dimensions:** `grammar`, `impact`, `architecture_design`
+- **Added dimensions:** `correctness` (first-class), `solution_quality`
+- **Per-type dimension sets:**
+  - open_ended: clarity, completeness, relevance, correctness, technical_depth, problem_solving, tradeoff_analysis
+  - behavioral: clarity, completeness, relevance, problem_solving
+  - coding/debugging: correctness, solution_quality, technical_depth, problem_solving
+  - system_design: correctness, solution_quality, tradeoff_analysis, technical_depth, problem_solving
+  - mcq/yes_no: correctness (deterministic)
+- **Prompt rewrite:**
+  - `EVALUATION_PROMPT` now includes `question_type`, `question_type_guidance`, `type_dimensions`, and `type_output_fields` placeholders
+  - Added `QUESTION_TYPE_GUIDANCE` dict (per-type evaluation instructions)
+  - Added `TYPE_DIMENSIONS` dict (per-type dimension names + descriptions)
+  - Added `TYPE_OUTPUT_FIELDS` dict (per-type JSON output template)
+  - `get_evaluation_prompt()` accepts `question_type` parameter
+- **`_EvaluationResponse`** uses `model_config = {"extra": "allow"}` — dimension scores extracted from extra fields, clamped to 1-10
+- **Scoring:** equal-weighted average of present dimensions × 10 (removed per-dimension weights from `WEIGHTS` dict)
+- **Radar chart:** dynamically collects all unique dimension keys across evaluations; averages per-dimension count (not total evaluation count)
+- **Feedback UI and exports:** iterate `eval_.scores.items()` instead of fixed field access
+- **Test count:** 93 total (all green)
+- Added ADR-012 to `docs/decisions.md`
+- Updated all docs — `architecture.md`, `PROMPTS.md`, `TESTING.md`, `decisions.md`, `logs.md`, `PROGRESS.md`, `CLAUDE.md`
+- **Status:** Phase 5 dynamic per-type evaluation complete

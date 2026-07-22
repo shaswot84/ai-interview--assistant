@@ -77,5 +77,18 @@
 - [x] 2026-07-22: Converted feedback from `cl.Message` + action callbacks to `cl.AskActionMessage` with inline handling, preventing button disable after answering
 - [x] 2026-07-22: Added `_handle_retry()` helper for re-running failed evaluations; `_show_feedback()` accepts `eval_failed` parameter
 
+### Completed (Phase 5 — Follow-up 2)
+- [x] 2026-07-22: `evaluate_answer()` dispatches by question type: `mcq`/`yes_no` → deterministic `_evaluate_objective()`, all others → LLM `_evaluate_llm()`
+- [x] 2026-07-22: `_evaluate_objective()` compares answer vs `correct_answer` case-insensitively; returns `scores={"correctness": 10}` (correct) or `{"correctness": 1}` (incorrect)
+- [x] 2026-07-22: `_format_transcript()` expanded to show all score dimensions dynamically via `eval_.scores` dict
+- [x] 2026-07-22: Tested deterministic path with 6 tests (correct, wrong, case-insensitive, Yes/No, null answer)
+- [x] 2026-07-22: `Evaluation.scores` refactored to `dict[str, int]` — dimensions are dynamic per question type
+- [x] 2026-07-22: Removed `grammar`, `impact`, `architecture_design` as score dimensions; added `correctness` and `solution_quality`
+- [x] 2026-07-22: `EVALUATION_PROMPT` now includes `question_type`, type-specific `QUESTION_TYPE_GUIDANCE`, and per-type dimension sets in both descriptions and output format
+- [x] 2026-07-22: `get_evaluation_prompt()` accepts `question_type` parameter; LLM returns only relevant metrics per type (extracted via `_EvaluationResponse`'s `extra="allow"` fields)
+- [x] 2026-07-22: `scoring.py` — `calculate_question_score()` uses equal-weighted average of present dimensions × 10; `prepare_radar_chart_data()` collects all unique dimension keys across evaluations dynamically
+- [x] 2026-07-22: Feedback UI and exports iterate `eval_.scores` items instead of fixed fields
+- [x] 2026-07-22: Updated all docs — architecture.md, PROMPTS.md, TESTING.md, decisions.md (ADR-012), logs.md, PROGRESS.md, CLAUDE.md
+
 ### Blocked
 - None

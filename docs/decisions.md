@@ -87,3 +87,11 @@
 **Decision:** Use the LLM to classify the role as IT-related or not. A `validate_role()` function sends a classification prompt with temperature 0.
 **Rationale:** Keyword-based matching is fragile and misses edge cases. LLM classification handles variations (e.g., "site reliability engineer") without maintaining an exhaustive keyword list.
 **Consequences:** Slow path (one LLM call per attempt); falls back to `True` (allow) if the API call fails.
+
+## ADR-012: Dynamic Per-Type Evaluation Dimensions
+**Date:** 2026-07-22
+**Status:** Accepted
+**Context:** The original evaluator returned the same 9 dimensions (clarity, completeness, relevance, grammar, impact, technical_depth, architecture_design, problem_solving, tradeoff_analysis) for every question type. This made no sense for MCQ (a simple correct/incorrect check), coding questions (no "architecture_design" or "grammar"), or Yes/No questions.
+**Decision:** Replace the fixed 9-field `Evaluation` schema with `scores: dict[str, int]` — each question type defines its own set of relevant dimensions. MCQ/Yes/No use deterministic `_evaluate_objective()` returning just `correctness`. LLM-evaluated types (open_ended, behavioral, coding, debugging, system_design) each have their own dimension set defined in `TYPE_DIMENSIONS`. The LLM prompt lists only the relevant dimensions for that type.
+**Rationale:** Dynamic dimensions eliminate nonsensical scores (e.g. "architecture_design: 10" for "Is Python dynamically typed?"). Each question type is evaluated on criteria that actually measure what the question is designed to assess. Deterministic evaluation for objective types removes LLM cost and latency.
+**Consequences:** Scoring is now equal-weighted (average of present dimensions × 10) rather than using per-dimension weights. Radar chart dynamically adapts to whatever dimension keys appear across evaluations. Backward compatibility is broken — any code reading `eval_.clarity` must now use `eval_.scores["clarity"]`. All consumers updated in the same commit.

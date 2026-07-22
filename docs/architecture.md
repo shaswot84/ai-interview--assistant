@@ -69,7 +69,7 @@ Env-based configuration loaded once at startup via `Config.from_env()`. Provides
 - `_call_with_retry()` — up to 2 retries with exponential backoff
 - `validate_role(role)` — LLM classifies whether a role is IT-related
 - `generate_questions(profile, question_config=None)` — tries LLM with optional `QuestionConfig` for type distribution; falls back to static question bank
-- `evaluate_answer(...)` — returns `Evaluation` with `INJECTION_GUARD` and score clamping (1-10)
+- `evaluate_answer(...)` — dispatches by `question.question_type`: `mcq`/`yes_no` → deterministic `_evaluate_objective()`, all others → `_evaluate_llm()` with `INJECTION_GUARD` and score clamping (1-10)
 - `synthesize_scorecard(state)` — returns `Scorecard` from full transcript
 
 ### 4. Prompts (`prompts.py`)
@@ -79,7 +79,10 @@ Env-based configuration loaded once at startup via `Config.from_env()`. Provides
 - `QUESTION_TYPE_DISTRIBUTION_TEMPLATE` — generates per-type distribution instructions for the LLM
 - `get_question_prompt(profile, config=None)` — builds the question gen system prompt; when `config` is provided, includes type-distribution block instead of the default 3-tech/2-behav ratio
 - `INJECTION_GUARD` — system-level instruction to ignore score-manipulation attempts in answer text
-- `EVALUATION_PROMPT` — seniority-aware evaluation with 9 scoring dimensions (5 communication + 4 technical), grammar correction, simplified version, actionable feedback
+- `QUESTION_TYPE_GUIDANCE` — per-type evaluation guidance dict (open_ended, behavioral, coding, debugging, system_design)
+- `TYPE_DIMENSIONS` — per-type dimension sets with descriptions (e.g., open_ended has clarity/completeness/relevance/correctness/technical_depth/problem_solving/tradeoff_analysis; coding has correctness/solution_quality/technical_depth/problem_solving)
+- `TYPE_OUTPUT_FIELDS` — per-type JSON template injected into the EVALUATION_PROMPT's RETURN FORMAT section
+- `EVALUATION_PROMPT` — unified template with `question_type`, `question_type_guidance`, `type_dimensions`, and `type_output_fields` placeholders; dimensions are dynamic per type
 - `SCORECARD_PROMPT` — strengths, improvements, model answer
 
 ### 5. Timer (`timer.py`)
@@ -89,12 +92,11 @@ Env-based configuration loaded once at startup via `Config.from_env()`. Provides
 - **Visual countdown bar** (injected into each question message via `app.py:_timer_bar_html()`): pure-CSS animation shrinking from 100%→0% width in blue (`#3B82F6`); turns red (`#EF4444`) with a blink effect when 80% of the timer has elapsed
 
 ### 6. Scoring (`scoring.py`)
-- Weighted: clarity 0.15, completeness 0.25, relevance 0.20, grammar 0.10, impact 0.30
-- `calculate_question_score(eval)` → 0-100
+- `calculate_question_score(eval)` → equal-weighted average of all present dimension scores × 10 → 0-100
 - `calculate_overall_score(transcript)` → average of non-skipped
 - `get_letter_grade(score)` → A≥90, B≥80, C≥70, D≥60, F<60
-- `prepare_radar_chart_data(transcript)` → dimension averages
-- `render_radar_chart(data)` → Plotly figure
+- `prepare_radar_chart_data(transcript)` — collects all unique dimension keys across evaluations, averages per key (divided by count of evaluations containing that key, not total evaluations)
+- `render_radar_chart(data)` → Plotly figure (dynamically adapts labels to whatever keys exist in data)
 
 ### 7. Export (`export.py`)
 - `generate_markdown_transcript(state)` — full Q&A as Markdown
@@ -109,7 +111,7 @@ Pydantic v2 models:
 - `UserProfile` — role, seniority, industry, interview_type (hardcoded to "technical")
 - `Question` — id, text, category, question_type (open_ended|behavioral|mcq|yes_no|coding|debugging|system_design), difficulty, expected_keywords, plus optional fields: options, correct_answer, starter_code, language, evaluation_type, buggy_code, expected_fix, evaluation_focus
 - `QuestionConfig` — total_questions (default 5), distribution (map of QuestionType to percentage), with `counts()` method
-- `Evaluation` — scores (1-10) per dimension across 9 dimensions: clarity, completeness, relevance, grammar, impact, technical_depth, architecture_design, problem_solving, tradeoff_analysis; plus strengths, weaknesses, grammar_correction, simplified_version, actionable_feedback
+- `Evaluation` — `scores: dict[str, int]` (dynamic dimensions per question type, each validated 1-10); plus strengths, weaknesses, grammar_correction, simplified_version, actionable_feedback
 - `Scorecard` — per-question scores, overall, letter grade, radar data
 - `SessionState` — current state, profile, questions, transcript, evaluations, scorecard
 

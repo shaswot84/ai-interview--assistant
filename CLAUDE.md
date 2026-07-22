@@ -18,6 +18,7 @@ Personalised mock interview app powered by an OpenAI-compatible LLM. Built with 
 - Type-annotate all function signatures
 - No bare `except:` — catch specific exceptions
 - One test file per module under `tests/`
+- `Evaluation.scores` is a `dict[str, int]` — dimensions are dynamic per question type (do not add fixed fields)
 
 ## State Machine
 ```
@@ -37,7 +38,7 @@ uv sync                            # Sync environment
 
 ## Tests
 ```bash
-uv run pytest tests/ -v                 # 84+ tests, all green
+uv run pytest tests/ -v                 # 93 tests, all green
 uv run pytest tests/ --runslow          # Include performance benchmarks (needs API key)
 ```
 
