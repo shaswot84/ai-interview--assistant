@@ -41,6 +41,34 @@ def _timer_bar_html(seconds: int) -> str:
 </style>"""
 
 
+def _frozen_timer_bar_html(color: str, pct_remaining: float) -> str:
+    """Static bar frozen at the given colour and remaining width."""
+    width = max(pct_remaining, 0.0) * 100
+    return f"""<div style="margin:8px 0;">
+  <div style="background:#e5e7eb;border-radius:6px;overflow:hidden;height:14px;">
+    <div style="height:100%;border-radius:6px;background:{color};width:{width:.1f}%;"></div>
+  </div>
+</div>"""
+
+
+async def _freeze_timer(state: SessionState) -> None:
+    """Replace the animated timer bar with a frozen version.
+
+    The bar freezes at the width and colour it had when the user acted —
+    blue before 80 % of the timer limit, red after.
+    """
+    from timer import check_elapsed_time, get_timer_limit
+    elapsed = check_elapsed_time(state)
+    limit = get_timer_limit()
+    remaining = max(0.0, limit - elapsed) / max(limit, 1)
+    color = "#EF4444" if elapsed >= limit * 0.8 else "#3B82F6"
+    msg: cl.Message | None = cl.user_session.get("timer_message")
+    if msg is not None:
+        msg.content = _frozen_timer_bar_html(color, remaining)
+        await msg.update()
+        cl.user_session.set("timer_message", None)
+
+
 def _settings_to_config(settings: dict) -> QuestionConfig:
     """Convert Chainlit settings dict to a QuestionConfig."""
     total = int(settings.get("total_questions", 5))
@@ -256,8 +284,6 @@ async def _show_question(state: SessionState):
     q = state.questions[state.current_question_index]
     total = len(state.questions)
     idx = state.current_question_index + 1
-    timer_limit = get_timer_limit()
-    timer_bar = _timer_bar_html(timer_limit)
 
     # Build the question content (shared across all types)
     question_content = f"### Question {idx}/{total}\n\n**{q.text}**\n\n"
@@ -265,10 +291,15 @@ async def _show_question(state: SessionState):
         question_content += f"```{q.language}\n{q.starter_code}\n```\n\n"
     elif q.question_type == QuestionType.DEBUGGING and q.buggy_code:
         question_content += f"```\n{q.buggy_code}\n```\n\n"
-    question_content += timer_bar
 
     # Send the question as a permanent message so it stays visible
     await cl.Message(content=question_content).send()
+
+    # Send the animated timer bar as a separate message so we can freeze it later
+    timer_limit = get_timer_limit()
+    timer_msg = cl.Message(content=_timer_bar_html(timer_limit))
+    await timer_msg.send()
+    cl.user_session.set("timer_message", timer_msg)
 
     # Send interaction buttons as a separate AskActionMessage
     if q.question_type == QuestionType.MCQ and q.options:
@@ -284,15 +315,18 @@ async def _show_question(state: SessionState):
         if res:
             name = res.get("name", "")
             if name == "_skip_q":
+                await _freeze_timer(state)
                 state = transition(state, "skip")
                 state = transition(state, "evaluation_done")
                 _set_state(state)
                 await _show_feedback(state)
             elif name == "_end_q":
+                await _freeze_timer(state)
                 state = transition(state, "end_early")
                 _set_state(state)
                 await _handle_completed(state)
             else:
+                await _freeze_timer(state)
                 answer = res.get("payload", {}).get("value", "")
                 await _handle_answer(state, answer)
         return
@@ -310,15 +344,18 @@ async def _show_question(state: SessionState):
         if res:
             name = res.get("name", "")
             if name == "_skip_q":
+                await _freeze_timer(state)
                 state = transition(state, "skip")
                 state = transition(state, "evaluation_done")
                 _set_state(state)
                 await _show_feedback(state)
             elif name == "_end_q":
+                await _freeze_timer(state)
                 state = transition(state, "end_early")
                 _set_state(state)
                 await _handle_completed(state)
             else:
+                await _freeze_timer(state)
                 answer = res.get("payload", {}).get("value", "")
                 await _handle_answer(state, answer)
         return
@@ -336,11 +373,13 @@ async def _show_question(state: SessionState):
         return
     name = res.get("name", "")
     if name == "skip":
+        await _freeze_timer(state)
         state = transition(state, "skip")
         state = transition(state, "evaluation_done")
         _set_state(state)
         await _show_feedback(state)
     elif name == "end_early":
+        await _freeze_timer(state)
         state = transition(state, "end_early")
         _set_state(state)
         await _handle_completed(state)
@@ -351,8 +390,10 @@ async def _show_question(state: SessionState):
         ).send()
         if answer_res:
             answer_text = answer_res["output"].strip()
+            await _freeze_timer(state)
             await _handle_answer(state, answer_text)
         else:
+            await _freeze_timer(state)
             state = transition(state, "skip")
             state = transition(state, "evaluation_done")
             _set_state(state)
